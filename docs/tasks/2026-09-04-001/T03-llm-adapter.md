@@ -4,7 +4,7 @@ title: "Provider-agnostic LLM adapter"
 plan-id: 2026-09-04-001
 unit: U2
 tier: deep
-status: not-started
+status: completed
 priority: P0
 dependencies: [2026-09-04-001-T02]
 files:
@@ -41,7 +41,7 @@ Normalize "messages + tool definitions in, text-or-tool-calls out" behind one in
 - Non-2xx: 429 -> classified retryable, bounded backoff, then a typed failure
 
 ## Acceptance Criteria
-- [ ] AnthropicProvider and OpenAIProvider translate to/from wire format against stubbed fetch, both satisfying the same interface as FakeProvider with normalized usage and stopReason
+- [x] AnthropicProvider and OpenAIProvider translate to/from wire format against stubbed fetch, both satisfying the same interface as FakeProvider with normalized usage and stopReason
 
 ## Dependencies
 - 2026-09-04-001-T02: CLI config must resolve provider selection and API keys before adapters can be instantiated
