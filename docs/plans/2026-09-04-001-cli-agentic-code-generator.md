@@ -13,7 +13,7 @@ design-id: 2026-09-04-001-design
 interactionMode: smart
 created: 2026-09-04
 updated: 2026-09-04
-version: 1.0
+version: 1.1
 ---
 
 ## Overview
@@ -31,6 +31,13 @@ quality of the loop itself (Agent Design 25%, Prompt Engineering 15%, Error Hand
 10% to the agent's own code quality. The app is the *output* being validated; the agent is the
 *deliverable* being graded.
 
+**Added in revision 1.1:** the agent must be able to use **skills** — procedural instruction packs
+living in `agent/skills/<name>/SKILL.md` inside the agent's own folder. Skills are discovered at
+prompt-build time, indexed by name and description, and their bodies injected into the planner,
+generator, and repair prompts when a task matches the skill's `when-to-use` condition (U14). This
+is the same progressive-disclosure pattern this repository uses for its own
+`.agents/skills/` (plan, work, learn, review).
+
 ## High-Level Technical Design
 
 > **Note:** This is directional guidance for review, not an implementation specification to copy.
@@ -39,7 +46,7 @@ quality of the loop itself (Agent Design 25%, Prompt Engineering 15%, Error Hand
 **Two nested loops, deliberately separated.** The outer loop is deterministic TypeScript with no
 LLM involvement — scaffold, plan, order, generate, validate, repair — and is the part that is
 fully unit-testable offline. The inner loop is the per-task function-calling cycle where the model
-requests tools and consumes their results. Keeping them separate is what lets 13 of 14 units run
+requests tools and consumes their results. Keeping them separate is what lets 14 of 15 units run
 without an API key.
 
 ```mermaid
@@ -109,7 +116,7 @@ mutate the reference tree the next prompt depends on.
 `agent/` is a new sub-project with its own `agent/tsconfig.json` and `agent/vitest.config.ts`, kept
 out of the app's `tsconfig.json` `include` (`["src", "vite-env.d.ts"]`) so app typechecking never
 compiles agent code and `generated-app/` stays a clean copy of the boilerplate. One Acceptance
-Criterion per unit, so unit -> task is 1:1 (14 tasks, within the Deep tier's 8-15 guidance).
+Criterion per unit, so unit -> task is 1:1 (15 tasks, within the Deep tier's 8-15 guidance).
 
 ### Phase 1: Foundation (deterministic; no API key needed)
 
@@ -270,6 +277,22 @@ Criterion per unit, so unit -> task is 1:1 (14 tasks, within the Deep tier's 8-1
     - Blast-radius: error in `CarCard.tsx` -> `SearchBar.tsx` bytes unchanged
     - `--max-retries 0`: validation runs once, no repair call, non-zero exit with the error report
 
+- U14. **Skill discovery and prompt injection (`agent/skills/`)**
+  - **Goal:** Let the agent use procedural skills from `agent/skills/<name>/SKILL.md` — discovered, indexed, and injected into prompts on demand — instead of hardcoding procedural knowledge in prompt builders.
+  - **Dependencies:** U6, U8
+  - **Files:**
+    - Create: `agent/src/skills.ts`, `agent/skills/README.md`
+    - Modify: `agent/src/prompts/planner.ts`, `agent/src/prompts/generator.ts`, `agent/src/prompts/repair.ts`, `agent/src/config.ts`
+    - Test: `agent/tests/skills.test.ts`
+  - **Acceptance Criteria:**
+    - The loader parses frontmatter (`name`, `description`, `when-to-use`) from each `SKILL.md`, renders a skill index (name + description only) into the planner/generator/repair system prompts, and injects the full body as procedural instructions only when a task's context matches `when-to-use`; a missing or empty `agent/skills/` directory is a no-op, and malformed frontmatter is skipped with a warning rather than aborting the run
+  - **Test Scenarios:**
+    - Index: two fixture skills -> system prompt contains both names and descriptions, no body text
+    - Injection: task matching a skill's `when-to-use` -> full `SKILL.md` body present in that task's generator prompt
+    - No-op: no `agent/skills/` dir -> prompts render identically to the U6 baseline (drift-guard still green)
+    - Malformed: one skill with bad frontmatter -> run continues, warning logged, other skills still indexed
+  - **Note:** Skill files are read at prompt-build time by the agent itself, not through the sandboxed tool registry (U4), so reading from `agent/skills/` outside `generated-app/` is a deliberate read-only exception — do NOT route skill loading through the sandboxed `read_file` tool. `--skills-dir` (default `agent/skills/`) resolves relative to the repo root. Added in plan revision 1.1.
+
 ### Phase 3: Rollout and submission evidence
 
 - U11. **Run trace, cost accounting, and offline replay**
@@ -374,7 +397,8 @@ not Critical). Impact ratings and rollback are included per the Deep tier.
 | The 640/1024 breakpoint requirement cannot be tested (jsdom has no meaningful `matchMedia`) | Medium | Medium | Generation prompt requires a `matchMedia`/viewport stub in the generated test setup, making the breakpoint rule test-first as specified; U12 asserts 640/641/1023/1024 -> mobile/tablet/tablet/desktop |
 | Repair edits spread beyond the broken file and regress working code | Medium | Medium | U10 targets only files named in the error list and asserts an untouched sibling stays byte-identical; full `typecheck` + `test` re-run after every repair, so regressions resurface as errors instead of shipping |
 | Model emits empty, truncated, or refusal content | Medium | Medium | Per-file byte cap plus non-empty assertion in U4/U9; rejection returned as `tool_result` so the loop retries in-context rather than aborting the run |
-| Reviewer sees one large commit and cannot trace the design (README's "How You Work Matters") | Medium | High without this | 14 tasks, one AC and one test each, committed individually via the Work skill; U11's trace directory is committed evidence; this plan and its artifacts already exist under `docs/plans/` |
+| Reviewer sees one large commit and cannot trace the design (README's "How You Work Matters") | Medium | High without this | 15 tasks, one AC and one test each, committed individually via the Work skill; U11's trace directory is committed evidence; this plan and its artifacts already exist under `docs/plans/` |
+| Skill files bloat context or inject conflicting instructions into prompts | Medium | Low | Skills are trusted repo-local files read read-only at prompt-build time; only name + description are indexed by default, the full body loads only on a `when-to-use` match, and U8's budget trimming still applies — skill content can never displace the spec or hard rules |
 | Evaluator lacks a key for the selected provider, or cannot reproduce a run | Medium | Medium | `.env.example` names both keys and provider is auto-detected from whichever key is present; U11's replay fixture lets CI and the evaluator verify the loop with **zero** network and no key |
 | External research unverified — `web_search` is unconfigured here (Ollama 401), so provider docs were not consulted | Low | High | Accepted deliberately: every other contract is verifiable in-repo, and both provider wire formats are pinned by U2's mocked-`fetch` tests, so a documentation mistake shows up as a red test; the queries remain recorded in the Research artifact for the implementation phase |
 
@@ -390,7 +414,8 @@ failed plan iteration costs the plan file, not the code.
 - **Feature flags / switches:** `--dry-run` (planning only, zero HTTP), `LLM_PROVIDER`
   (`anthropic` | `openai`, defaulting to whichever API key is present), `--force` (replace a
   non-empty output dir), `--max-retries` and `--max-iterations` (the two cost caps),
-  `--out` (defaults to `generated-app`). Deferred bonus switches: a `--cache` opt-in keyed by
+  `--out` (defaults to `generated-app`), `--skills-dir` (defaults to `agent/skills/`, skill
+discovery root). Deferred bonus switches: a `--cache` opt-in keyed by
   `(model, prompt hash)`, and `--parallel N` for independent tasks.
 - **Monitoring / observability:** each run writes `agent-runs/<timestamp>/` with `plan.json`,
   per-task prompt/response and tool-call records, per-attempt validation logs, and a `run.json`

@@ -18,6 +18,7 @@
 - [ ] T09 — Context builder with token budget (`U8`, AC: assembles contract + dependency outputs, elides to fit budget, never drops spec/rules, reports omissions) — `docs/tasks/2026-09-04-001/T09-context-builder.md`
 - [ ] T10 — Generator: per-task tool-calling loop (`U9`, AC: FakeProvider drives real write_file calls, loop terminates on response or max-iterations as typed failure) — `docs/tasks/2026-09-04-001/T10-generator.md`
 - [ ] T11 — Repair loop with bounded retries and stall detection (`U10`, AC: repair sends errors + offending files, applies edits, stops at max-retries or stall, exits non-zero) — `docs/tasks/2026-09-04-001/T11-repair-loop.md`
+- [ ] T15 — Skill discovery and prompt injection (`U14`, AC: skills parsed from agent/skills/*/SKILL.md, indexed in prompts, bodies injected on when-to-use match, no-op without the dir) — `docs/tasks/2026-09-04-001/T15-skill-discovery-and-prompt-injection.md`
 
 ### Phase 3: Rollout and submission evidence
 
