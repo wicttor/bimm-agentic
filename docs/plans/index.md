@@ -15,3 +15,9 @@ This is the index of planning documents for the project. It serves as a central 
      allocates a matching task index at `docs/tasks/<plan-id>/index.md`. -->
 
 _No plans yet._
+
+## Session Ends
+
+<!-- Add new session ends below. Artifacts live in `docs/plans/.end-session/`. -->
+
+- [2026-09-04-001](.end-session/2026-09-04-001.md): Initialize Arreio workflow structure — skills installed to `.agents/skills/`, `ARCHITECTURE.md` and docs/ layout created. Commit `fc4cd72`. Agent: qwen3.8-flash.
