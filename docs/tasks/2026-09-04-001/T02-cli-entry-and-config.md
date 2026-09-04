@@ -4,7 +4,7 @@ title: "CLI entry and config resolution"
 plan-id: 2026-09-04-001
 unit: U1b
 tier: deep
-status: not-started
+status: completed
 priority: P0
 dependencies: [2026-09-04-001-T01]
 files:
@@ -41,7 +41,7 @@ The CLI parses `--spec`, `--out`, `--provider`, `--model`, `--max-retries`, `--m
 - Env contract: `.env.example` names `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `LLM_PROVIDER`, and no secret value is committed
 
 ## Acceptance Criteria
-- [ ] CLI parses all flags and exits with an error naming the exact missing variable instead of an ambiguous network failure
+- [x] CLI parses all flags and exits with an error naming the exact missing variable instead of an ambiguous network failure
 
 ## Dependencies
 - 2026-09-04-001-T01: Agent sub-project must be wired (tsconfig, vitest, scripts) before CLI code can be compiled and tested

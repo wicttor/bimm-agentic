@@ -5,7 +5,7 @@
 ### Phase 1: Foundation (deterministic; no API key needed)
 
 - [x] T01 — Sub-project wiring: agent tsconfig, vitest project, scripts, env contract (`U1a`, AC: npm run typecheck compiles only app, npm run agent:typecheck compiles only agent, agent tests run in node) — `docs/tasks/2026-09-04-001/T01-sub-project-wiring.md`
-- [ ] T02 — CLI entry and config resolution (`U1b`, AC: CLI parses all flags and exits naming exact missing variable) — `docs/tasks/2026-09-04-001/T02-cli-entry-and-config.md`
+- [x] T02 — CLI entry and config resolution (`U1b`, AC: CLI parses all flags and exits naming exact missing variable) — `docs/tasks/2026-09-04-001/T02-cli-entry-and-config.md`
 - [ ] T03 — Provider-agnostic LLM adapter (`U2`, AC: Anthropic/OpenAI adapters translate wire format against stubbed fetch, same interface as FakeProvider) — `docs/tasks/2026-09-04-001/T03-llm-adapter.md`
 - [ ] T04 — Scaffolder: boilerplate copy (`U3`, AC: copies app subset, excludes node_modules/agent/docs, refuses overwrite without --force) — `docs/tasks/2026-09-04-001/T04-scaffolder-boilerplate-copy.md`
 - [ ] T05 — Sandboxed tool registry (`U4`, AC: read_file/write_file/list_files confined to output dir, run_command allow-listed, rejections as structured errors) — `docs/tasks/2026-09-04-001/T05-sandboxed-tool-registry.md`
