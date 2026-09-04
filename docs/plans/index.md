@@ -24,3 +24,4 @@ This is the index of planning documents for the project. It serves as a central 
 
 - [2026-09-04-001](.end-session/2026-09-04-001.md): Initialize Arreio workflow structure — skills installed to `.agents/skills/`, `ARCHITECTURE.md` and docs/ layout created. Commit `fc4cd72`. Agent: qwen3.8-flash.
 - [2026-09-04-002](.end-session/2026-09-04-002.md): Slice CLI agent plan into 14 tasks — task files for Work skill execution, one AC per task, TDD-ordered. Commit `f27a05f`. Agent: pi.
+- [2026-09-04-003](.end-session/2026-09-04-003.md): Execute T01 sub-project wiring — `agent/` isolated as its own type-checked, node-tested TS sub-project (own tsconfig + vitest project, `agent:typecheck`/`agent:test`, root vitest `include` pinned to `src/**`, no `dotenv`). Commit `e3b1561`. Agent: pi.
