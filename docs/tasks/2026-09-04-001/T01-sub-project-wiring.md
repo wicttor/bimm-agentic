@@ -4,7 +4,7 @@ title: "Sub-project wiring: agent tsconfig, vitest project, scripts, env contrac
 plan-id: 2026-09-04-001
 unit: U1a
 tier: deep
-status: not-started
+status: completed
 priority: P0
 dependencies: []
 files:
@@ -38,7 +38,7 @@ Establish `agent/` as an independently type-checked and independently tested Typ
 - Isolation: a deliberate type error inside `agent/src/` -> `npm run typecheck` still passes while `npm run agent:typecheck` fails
 
 ## Acceptance Criteria
-- [ ] `npm run typecheck` compiles only the app, `npm run agent:typecheck` compiles only `agent/`, and agent tests run in node environment separate from app's jsdom
+- [x] `npm run typecheck` compiles only the app, `npm run agent:typecheck` compiles only `agent/`, and agent tests run in node environment separate from app's jsdom
 
 ## Dependencies
 - None

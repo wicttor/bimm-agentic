@@ -12,6 +12,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // Pin the app project to src/ so agent/** tests are never collected here
+    // (they run under agent/vitest.config.ts in a node environment).
+    include: ["src/**/*.test.{ts,tsx}", "src/**/*.spec.{ts,tsx}"],
     setupFiles: ["./src/test-setup.ts"],
   },
 });

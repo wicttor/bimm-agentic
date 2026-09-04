@@ -4,7 +4,7 @@
 
 ### Phase 1: Foundation (deterministic; no API key needed)
 
-- [ ] T01 — Sub-project wiring: agent tsconfig, vitest project, scripts, env contract (`U1a`, AC: npm run typecheck compiles only app, npm run agent:typecheck compiles only agent, agent tests run in node) — `docs/tasks/2026-09-04-001/T01-sub-project-wiring.md`
+- [x] T01 — Sub-project wiring: agent tsconfig, vitest project, scripts, env contract (`U1a`, AC: npm run typecheck compiles only app, npm run agent:typecheck compiles only agent, agent tests run in node) — `docs/tasks/2026-09-04-001/T01-sub-project-wiring.md`
 - [ ] T02 — CLI entry and config resolution (`U1b`, AC: CLI parses all flags and exits naming exact missing variable) — `docs/tasks/2026-09-04-001/T02-cli-entry-and-config.md`
 - [ ] T03 — Provider-agnostic LLM adapter (`U2`, AC: Anthropic/OpenAI adapters translate wire format against stubbed fetch, same interface as FakeProvider) — `docs/tasks/2026-09-04-001/T03-llm-adapter.md`
 - [ ] T04 — Scaffolder: boilerplate copy (`U3`, AC: copies app subset, excludes node_modules/agent/docs, refuses overwrite without --force) — `docs/tasks/2026-09-04-001/T04-scaffolder-boilerplate-copy.md`
@@ -24,3 +24,14 @@
 - [ ] T12 — Run trace, cost accounting, and offline replay (`U11`, AC: trace directory with plan.json, per-task records, validation output, and token/cost summary from usage fields) — `docs/tasks/2026-09-04-001/T12-run-trace.md`
 - [ ] T13 — End-to-end demo run and committed sample output (`U12`, AC: one CLI invocation produces app where typecheck and test pass covering all six behaviors) — `docs/tasks/2026-09-04-001/T13-e2e-demo-run.md`
 - [ ] T14 — Generalization check and architecture write-up (`U13`, AC: variant spec drives renamed files with no agent change, docs record architecture/tradeoffs/cost) — `docs/tasks/2026-09-04-001/T14-generalization.md`
+
+## Work Report — 2026-09-04-001-review
+
+- **Status:** complete
+- **Work branch:** work/cli-agentic-code-generator
+- **Tasks:** 1/1 completed, 0 for-review, 0 blocked, 0 skipped (scope: `2026-09-04-001-T01` only)
+- **Gate decision:** Gate passed — clean regression check, no scope creep
+- **Regression check:** clean
+- **Scope creep:** none
+- **Learnings to capture:** 4 (run `/learn` to persist)
+- **Work Report:** docs/plans/.work/.review/2026-09-04-001-review.md
