@@ -23,3 +23,4 @@ This is the index of planning documents for the project. It serves as a central 
 <!-- Add new session ends below. Artifacts live in `docs/plans/.end-session/`. -->
 
 - [2026-09-04-001](.end-session/2026-09-04-001.md): Initialize Arreio workflow structure — skills installed to `.agents/skills/`, `ARCHITECTURE.md` and docs/ layout created. Commit `fc4cd72`. Agent: qwen3.8-flash.
+- [2026-09-04-002](.end-session/2026-09-04-002.md): Slice CLI agent plan into 14 tasks — task files for Work skill execution, one AC per task, TDD-ordered. Commit `f27a05f`. Agent: pi.
