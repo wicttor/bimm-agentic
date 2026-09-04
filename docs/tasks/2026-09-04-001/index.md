@@ -57,5 +57,6 @@
 - **Regression check:** clean (app 2/2 · agent 36/36 · both typechecks exit 0)
 - **Scope creep:** none (`index.ts`, `config.ts`, `package.json` untouched; only the 4 `files.create` paths + 1 test)
 - **Test strength:** 3 injected wire-format defects all caught (schema key, system placement, retryability)
-- **Learnings to capture:** 5 (run `/learn` to persist; closes the adapter half of the `llm-integration` gap)
+- **Learnings to capture:** 6 (run `/learn` to persist; closes the adapter half of the `llm-integration` gap)
+- **Branch note:** T03 commits were merged/pushed to `main` mid-run by the repo's session-end automation; `main` = work branch = `585be34`, no rewrite (see Work Report)
 - **Work Report:** docs/plans/.work/.review/2026-09-04-003-review.md
