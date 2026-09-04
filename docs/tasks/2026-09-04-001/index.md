@@ -47,3 +47,15 @@
 - **Scope creep:** none (`package.json` untouched; no T03 files created)
 - **Learnings to capture:** 4 (run `/learn` to persist)
 - **Work Report:** docs/plans/.work/.review/2026-09-04-002-review.md
+
+## Work Report — 2026-09-04-003-review
+
+- **Status:** complete
+- **Work branch:** work/cli-agentic-code-generator
+- **Tasks:** 1/1 completed, 0 for-review, 0 blocked, 0 skipped (scope: `2026-09-04-001-T03` only)
+- **Gate decision:** Gate passed — clean regression check, no scope creep
+- **Regression check:** clean (app 2/2 · agent 36/36 · both typechecks exit 0)
+- **Scope creep:** none (`index.ts`, `config.ts`, `package.json` untouched; only the 4 `files.create` paths + 1 test)
+- **Test strength:** 3 injected wire-format defects all caught (schema key, system placement, retryability)
+- **Learnings to capture:** 5 (run `/learn` to persist; closes the adapter half of the `llm-integration` gap)
+- **Work Report:** docs/plans/.work/.review/2026-09-04-003-review.md
