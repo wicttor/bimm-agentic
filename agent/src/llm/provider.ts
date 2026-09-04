@@ -10,8 +10,6 @@ import type { ProviderName } from "../config.ts";
 /** A JSON object as parsed off the wire: every field is unknown until narrowed. */
 export type WireJson = Record<string, unknown>;
 
-type Json = WireJson;
-
 // ---------------------------------------------------------------------------
 // Content
 // ---------------------------------------------------------------------------
@@ -39,7 +37,8 @@ export interface ToolDefinition {
 }
 
 /** Terminal reason a response stopped, normalized across providers. */
-export type StopReason = "stop" | "tool_use" | "max_tokens" | "error";
+/** Terminal reasons a *successful* call can report; failures leave as `LlmError`. */
+export type StopReason = "stop" | "tool_use" | "max_tokens";
 
 /** Normalized token accounting; every provider reports the same four fields. */
 export interface Usage {
@@ -209,7 +208,7 @@ function resolveRetry(options: ProviderOptions): RetryPolicy {
 }
 
 /** Map an HTTP status onto a classified, retry-flagged adapter error. */
-function classifyHttpError(provider: string, status: number, payload: Json): LlmError {
+function classifyHttpError(provider: string, status: number, payload: WireJson): LlmError {
   const kind: LlmErrorKind =
     status === 401 || status === 403
       ? "auth"
@@ -224,21 +223,21 @@ function classifyHttpError(provider: string, status: number, payload: Json): Llm
   });
 }
 
-function providerMessage(payload: Json): string {
+function providerMessage(payload: WireJson): string {
   const err = payload["error"];
   if (typeof err === "string") return err;
   if (typeof err === "object" && err !== null) {
-    const nested = (err as Json)["message"];
+    const nested = (err as WireJson)["message"];
     if (typeof nested === "string") return nested;
   }
   const top = payload["message"];
   return typeof top === "string" ? top : "no message from provider";
 }
 
-async function readJsonBody(res: Response): Promise<Json> {
+async function readJsonBody(res: Response): Promise<WireJson> {
   try {
     const parsed = (await res.json()) as unknown;
-    return typeof parsed === "object" && parsed !== null ? (parsed as Json) : {};
+    return typeof parsed === "object" && parsed !== null ? (parsed as WireJson) : {};
   } catch {
     return {};
   }
@@ -261,12 +260,12 @@ export async function postJson(
   spec: HttpRequestSpec,
   options: ProviderOptions,
   signal?: AbortSignal,
-): Promise<Json> {
+): Promise<WireJson> {
   const policy = resolveRetry(options);
   const fetchImpl = options.fetch ?? globalThis.fetch;
 
   for (let attempt = 0; attempt < policy.maxAttempts; attempt += 1) {
-    let outcome: { ok: true; payload: Json } | { ok: false; error: LlmError };
+    let outcome: { ok: true; payload: WireJson } | { ok: false; error: LlmError };
     try {
       const res = await fetchImpl(spec.url, {
         method: "POST",
@@ -306,11 +305,11 @@ export async function postJson(
 // missing or mistyped field degrades to a default identically in every adapter instead of
 // diverging per provider (and so no call site needs a cast).
 
-export function isJsonObject(value: unknown): value is Json {
+export function isJsonObject(value: unknown): value is WireJson {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function asJsonObjectArray(value: unknown): Json[] {
+export function asJsonObjectArray(value: unknown): WireJson[] {
   return Array.isArray(value) ? value.filter(isJsonObject) : [];
 }
 

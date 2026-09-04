@@ -28,10 +28,10 @@ import {
 } from "./provider.ts";
 
 /** OpenAI Chat Completions API. */
-export const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 
 /** Fallback completion cap when the caller does not specify one. */
-export const OPENAI_DEFAULT_MAX_TOKENS = 8_000;
+const OPENAI_DEFAULT_MAX_TOKENS = 8_000;
 
 // ---------------------------------------------------------------------------
 // Internal -> wire

@@ -27,11 +27,11 @@ import {
 } from "./provider.ts";
 
 /** Anthropic Messages API. The version is sent explicitly on every request. */
-export const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
-export const ANTHROPIC_VERSION = "2023-06-01";
+const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_VERSION = "2023-06-01";
 
 /** Anthropic rejects requests without `max_tokens`; the loop overrides it per call. */
-export const ANTHROPIC_DEFAULT_MAX_TOKENS = 8_000;
+const ANTHROPIC_DEFAULT_MAX_TOKENS = 8_000;
 
 // ---------------------------------------------------------------------------
 // Internal -> wire
