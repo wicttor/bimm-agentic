@@ -1,0 +1,8 @@
+{
+  "packages": [
+    "npm:@juicesharp/rpiv-advisor",
+    "npm:@juicesharp/rpiv-ask-user-question",
+    "npm:@juicesharp/rpiv-todo",
+    "npm:@juicesharp/rpiv-web-tools"
+  ]
+}
