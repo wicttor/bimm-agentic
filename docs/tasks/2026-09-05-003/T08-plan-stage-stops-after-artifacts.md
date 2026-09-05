@@ -54,6 +54,81 @@ hand-off — just committed artifacts and the command that picks the run up.
 - 2026-09-05-003-T02: the manifest keys this stage is the only writer of
 - 2026-09-05-003-T04: the commit that closes the stage (and its `paths_ignored` failure on this repo's `generated-app/`)
 
+## Implementation Notes
+
+### Plan-Only Flow
+The plan stage executes exactly six sequential steps and then stops:
+1. **Scaffold** — Create the `--out` directory tree and `.bimm/` subdirectory
+2. **Derive Rules** — Construct the specification rules for validation
+3. **Plan** — Call the provider once to produce the dependency-ordered task list
+4. **Write Artifacts** — Persist the plan document and individual task records to disk (with manifest indexes)
+5. **Commit** — Stage and commit all scaffold + artifact paths to git (or skip with `--no-commit`)
+6. **Print Continuation** — Output the command to continue to the next stage and exit(0)
+
+No executor is invoked in the plan stage. The provider sees only one turn: the planner request.
+
+### Continuation Command Construction
+The continuation command is constructed from the `plan-id` field in the generated plan artifact and printed to stdout:
+- After successful plan commit: prints `drive --plan-id <PLAN_ID>`
+- For bare `--spec` invocation: prints the same `drive` command
+- The `--plan-id` value is a unique identifier from the planner response (e.g., `2026-09-05-003`)
+
+The command lines appear on separate lines to stdout after any informational logs, ensuring automation can parse and execute them reliably.
+
+### Commit Semantics During Plan
+- The plan stage **must** commit the scaffold and artifacts together in one atomic git commit
+- This commit becomes the baseline for all subsequent work sessions
+- The commit message includes:
+  - The plan ID
+  - The number of tasks planned
+  - A reference to this being the "plan stage" output
+- Example: `bimm: plan 2026-09-05-003 (7 tasks)`
+- If `--no-commit` is passed, artifacts are written but no git operations occur; the exit remains 0 with continuation printed
+
+### Examples
+
+#### Example 1: Successful plan stage
+```bash
+$ bimm --spec ./spec.md --out ./generated --plan-id 2026-09-05-003
+[INFO] Scaffolding output directory at ./generated
+[INFO] Deriving rules from spec
+[INFO] Planning tasks (provider call 1)
+[INFO] Writing 7 tasks and plan manifest
+[INFO] Committing scaffold and artifacts (paths: .bimm/, plan.md, tasks/*.md)
+[SUCCESS] Plan stage complete (7 tasks planned)
+drive --plan-id 2026-09-05-003
+```
+
+#### Example 2: Bare --spec (plan subcommand implicit)
+```bash
+$ bimm --spec ./spec.md --out ./generated
+[INFO] Scaffolding output directory at ./generated
+[INFO] Deriving rules from spec
+[INFO] Planning tasks (provider call 1)
+[INFO] Writing 7 tasks and plan manifest
+[INFO] Committing scaffold and artifacts
+[SUCCESS] Plan stage complete (7 tasks planned)
+drive --plan-id 2026-09-05-003
+work --plan-id 2026-09-05-003
+```
+
+#### Example 3: Plan with --no-commit
+```bash
+$ bimm plan --spec ./spec.md --out ./generated --no-commit
+[INFO] Scaffolding output directory at ./generated
+[INFO] Deriving rules from spec
+[INFO] Planning tasks (provider call 1)
+[INFO] Writing 7 tasks and plan manifest
+[INFO] (skipping commit: --no-commit)
+[SUCCESS] Plan stage complete (7 tasks planned)
+drive --plan-id 2026-09-05-003
+```
+
+### Key Properties
+- **Termination proof:** Exactly one provider call + scripted fake ensures deterministic plan completion
+- **Clean state:** Commits act as boundary markers between stages; the working tree is clean before any work session reads the queue
+- **Error handling:** If artifacts fail to write, the stage reports the error, rolls back any commits, and exits non-zero (no task queue exists to hand off, so silent continuation is impossible)
+
 ## Notes
 
 - The commit at the end of the plan stage is the base every task commit assumes: it is what makes

@@ -60,6 +60,91 @@ it stopped.
 - 2026-09-05-003-T05: `executeTask` is the only executor entry point this stage may use
 - 2026-09-05-003-T06: one session's outcome must land in a cumulative report
 
+## Implementation / Notes
+
+### Session Lifecycle
+
+```
+Session Start (fresh process)
+    ↓
+readRunManifest (config from CLI flags, task index frontmatter)
+    ↓
+requireCleanTree (unless --no-commit)
+    ↓ [refuse if dirty]
+loadTaskQueue + nextRunnableTask (or --task <id>)
+    ↓ [exit 5 if empty, exit 3 if stalled]
+executeTask (one task, dependencies from disk)
+    ↓ [on model stop or error]
+validate (typecheck + test, --gate none skips)
+    ↓ [validate fails → repair loop]
+repair (up to --max-retries attempts)
+    ↓
+recordWorkOutcomes (write task file + work report)
+    ↓
+GATE DECISION
+    ├─ GREEN (validation passed)
+    │   ├─ commitPaths([written files, task file, index])
+    │   ├─ record status: completed
+    │   └─ EXIT 0
+    │
+    └─ RED (validation failed, repair exhausted)
+        ├─ restoreWrittenPaths (this session's files only)
+        ├─ artifact-only commit (record + report only)
+        ├─ record status: blocked + reason
+        └─ EXIT 4
+```
+
+### Gate Behavior
+
+- **Validation gates every green commit.** Runs after task execution and before recording outcomes.
+- **Repair is bounded.** Each repair attempt increments a counter; stops at `--max-retries`.
+- **--gate none skips validation.** Commits happen without gating; used for dev/debug only.
+- **Validation failure → repair loop.** After repair exhaustion, session records `blocked` and exits 4.
+- **Validation success → commit + exit 0.** Task is committed as complete.
+
+### Commit vs Restore Flow
+
+| Outcome | Files | Commit | Exit | Notes |
+|---------|-------|--------|------|-------|
+| Green (pass validation) | Written files + task file + index | One commit with all three | 0 | Tree is clean, queue advanced |
+| Red (fail validation) | Session-scoped restore (tracked paths deleted, untracked removed) | Artifact-only (task file + report only) | 4 | Tree is clean, queue ready for retry/skip |
+| Empty queue | None | None | 5 | No session started; zero provider calls |
+| Stalled queue | None | None | 3 | No session started; named blocked dependency |
+| Dirty tree (at start) | None | None | 2 | Refused before manifest; zero provider calls |
+
+### Exit-Code Mapping
+
+- **Exit 0:** One task completed, committed, queue advanced. Normal progress.
+- **Exit 2:** Dirty tree at session start. Refused before any model call.
+- **Exit 3:** Task queue is stalled (blocked dependency not completed). Named in error message.
+- **Exit 4:** One task attempted, validation failed, repair exhausted. Task marked blocked, committed.
+- **Exit 5:** Task queue is empty. No work to do; session did not start.
+
+### Validation & Repair Integration
+
+- Validation runs after `executeTask` but before `recordWorkOutcomes`.
+- If validation fails, `repair()` is called up to `--max-retries` times.
+- Each repair attempt is independent; repair does not re-run the model.
+- After repair exhaustion, outcome is recorded with `status: blocked` and reason.
+- The blocked outcome and report are committed (artifact-only, no written files).
+
+### Refusal Order (Safety Property)
+
+1. **Manifest:** Missing config keys or invalid flags → refuse before clean-tree check.
+2. **Clean tree:** Dirty working tree → refuse before queue check (exit 2).
+3. **Queue:** Empty or stalled queue → refuse before any LLM call (exit 5, 3).
+4. **Network:** Only after all pre-flight checks pass, the model is called.
+
+This order ensures a session that fails early does not burn tokens on a problem that will not proceed.
+
+### Key Invariants
+
+- **One commit per completed task.** Exactly one green commit, or exactly one artifact-only commit.
+- **Scoped restore.** Red sessions restore only written files they produced, not task file or index.
+- **Artifact-only commit on blocked.** The block is a record worth keeping; next session starts clean.
+- **No model commit.** The model cannot issue commit commands; all commits are harness-side.
+- **No retry on git failure.** If commit fails, session exits with that error; no restart logic.
+
 ## Notes
 
 - The refusal order is a safety property: manifest → clean tree → queue → **then** the network. A session that burns tokens before discovering it is about to fail leaves the human with a cost and no progress.
