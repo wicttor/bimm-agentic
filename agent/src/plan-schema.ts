@@ -1,6 +1,35 @@
 // JSON Schema validation for task plans (task 2026-09-04-001-T08).
+//
+// Driven entirely by `TASK_PLAN_JSON_SCHEMA`, so the planner can never advertise one shape and
+// accept another. Unknown keys are tolerated (the schema opts into `additionalProperties`) because
+// the Tasks phase of the plan skill may add fields before this repo's schema does; every key the
+// schema *does* declare is type-checked, and the four required keys stay required.
 
 import { TASK_PLAN_JSON_SCHEMA } from "./prompts/planner.ts";
+
+type PropertySpec = Record<string, unknown>;
+
+/** Type-check one declared property against its schema entry. Null means "conforms". */
+function checkProperty(key: string, spec: PropertySpec, value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+
+  if (spec.type === "string") {
+    return typeof value === "string" ? null : `${key}: must be a string`;
+  }
+
+  if (spec.type === "array") {
+    if (!Array.isArray(value)) return `${key}: must be an array`;
+    const items = spec.items as PropertySpec | undefined;
+    if (items?.type === "string") {
+      for (let i = 0; i < value.length; i += 1) {
+        if (typeof value[i] !== "string") return `${key}[${i}]: must be a string`;
+      }
+    }
+    return null;
+  }
+
+  return null;
+}
 
 /** Validate an unknown value against the planner schema. Returns errors if validation fails. */
 export function validateTaskPlan(value: unknown): { ok: true } | { ok: false; errors: string[] } {
@@ -20,50 +49,12 @@ export function validateTaskPlan(value: unknown): { ok: true } | { ok: false; er
     }
   }
 
-  // If additionalProperties is false, check for unexpected fields
-  if (!TASK_PLAN_JSON_SCHEMA.additionalProperties) {
-    for (const key in obj) {
-      if (!(key in TASK_PLAN_JSON_SCHEMA.properties)) {
-        errors.push(`Unexpected field: ${key}`);
-      }
-    }
-  }
-
-  // Validate individual properties
-  // file: must be string
-  if ("file" in obj && typeof obj.file !== "string") {
-    errors.push("file: must be a string");
-  }
-
-  // purpose: must be string
-  if ("purpose" in obj && typeof obj.purpose !== "string") {
-    errors.push("purpose: must be a string");
-  }
-
-  // dependsOn: must be array of strings
-  if ("dependsOn" in obj) {
-    if (!Array.isArray(obj.dependsOn)) {
-      errors.push("dependsOn: must be an array");
-    } else {
-      for (let i = 0; i < obj.dependsOn.length; i += 1) {
-        if (typeof obj.dependsOn[i] !== "string") {
-          errors.push(`dependsOn[${i}]: must be a string`);
-        }
-      }
-    }
-  }
-
-  // exports: must be array of strings
-  if ("exports" in obj) {
-    if (!Array.isArray(obj.exports)) {
-      errors.push("exports: must be an array");
-    } else {
-      for (let i = 0; i < obj.exports.length; i += 1) {
-        if (typeof obj.exports[i] !== "string") {
-          errors.push(`exports[${i}]: must be a string`);
-        }
-      }
-    }
+  // Type-check every declared key that is present. Undeclared keys are ignored by design:
+  // `additionalProperties` is true on this schema, so an extra field is information, not a defect.
+  for (const [key, spec] of Object.entries(TASK_PLAN_JSON_SCHEMA.properties)) {
+    if (!(key in obj)) continue;
+    const error = checkProperty(key, spec as PropertySpec, obj[key]);
+    if (error) errors.push(error);
   }
 
   if (errors.length > 0) {

@@ -13,6 +13,8 @@ import {
   discoverSkills,
   renderSkillIndex,
   loadSkillBody,
+  loadSkillBundle,
+  findSkill,
   injectMatchingSkills,
   type SkillMeta,
 } from "../src/skills.ts";
@@ -316,6 +318,111 @@ describe("Skills discovery and injection (T15)", () => {
       expect(result).toContain("Skill 2");
       expect(result).toContain("Content 1");
       expect(result).toContain("Content 2");
+    });
+  });
+
+  describe("skills without when-to-use, and phase-module bundles (plan/work wiring)", () => {
+    const WORKFLOW_SKILL = `---
+name: plan
+description: "Orchestrates Scope -> Research -> Design -> Generate -> Tasks"
+disable-model-invocation: true
+---
+
+# Plan
+
+The pipeline table lives here.
+`;
+
+    it("discovers a skill that has no when-to-use, with an empty whenToUse", () => {
+      mkdirSync(join(testSkillsDir, "plan"));
+      writeFileSync(join(testSkillsDir, "plan", "SKILL.md"), WORKFLOW_SKILL);
+
+      const skills = discoverSkills(testSkillsDir);
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0]).toMatchObject({ id: "plan", name: "plan", whenToUse: "" });
+    });
+
+    it("still skips a skill missing name or description", () => {
+      mkdirSync(join(testSkillsDir, "nope"));
+      writeFileSync(
+        join(testSkillsDir, "nope", "SKILL.md"),
+        "---\nwhen-to-use: always\n---\n\n# Nope\n"
+      );
+      const warnSpy = vi.spyOn(console, "warn");
+
+      expect(discoverSkills(testSkillsDir)).toHaveLength(0);
+      expect(warnSpy.mock.calls[0]?.[0]).toContain("nope");
+
+      warnSpy.mockRestore();
+    });
+
+    it("inlines requested phase modules, in the order asked", () => {
+      mkdirSync(join(testSkillsDir, "plan", "modules"), { recursive: true });
+      writeFileSync(join(testSkillsDir, "plan", "SKILL.md"), WORKFLOW_SKILL);
+      writeFileSync(join(testSkillsDir, "plan", "modules", "tasks.md"), "---\ntitle: Tasks\n---\n\nSlice one task per AC.\n");
+      writeFileSync(join(testSkillsDir, "plan", "modules", "generate.md"), "\nRender the final plan.\n");
+
+      const [skill] = discoverSkills(testSkillsDir);
+      if (!skill) throw new Error("skill not discovered");
+
+      const bundle = loadSkillBundle(skill, { modules: ["tasks", "generate"] });
+
+      expect(bundle.text).toContain("The pipeline table lives here.");
+      expect(bundle.text).toContain("Phase module: tasks");
+      expect(bundle.text).toContain("Slice one task per AC.");
+      expect(bundle.text).toContain("Render the final plan.");
+      // Module frontmatter is metadata for the human reader, not prompt content.
+      expect(bundle.text).not.toContain("title: Tasks");
+      expect(bundle.included).toEqual(["tasks", "generate"]);
+      expect(bundle.omitted).toEqual([]);
+    });
+
+    it("reports missing and over-budget modules instead of dropping them silently", () => {
+      mkdirSync(join(testSkillsDir, "plan", "modules"), { recursive: true });
+      writeFileSync(join(testSkillsDir, "plan", "SKILL.md"), WORKFLOW_SKILL);
+      writeFileSync(join(testSkillsDir, "plan", "modules", "big.md"), "x".repeat(500));
+
+      const [skill] = discoverSkills(testSkillsDir);
+      if (!skill) throw new Error("skill not discovered");
+
+      const bundle = loadSkillBundle(skill, { modules: ["big", "absent"], maxBytes: 200 });
+
+      expect(bundle.included).toEqual([]);
+      expect(bundle.omitted.map((o) => `${o.name}:${o.reason}`).sort()).toEqual([
+        "absent:missing",
+        "big:over-budget",
+      ]);
+    });
+
+    it("finds a skill by id or name, case-insensitively", () => {
+      mkdirSync(join(testSkillsDir, "plan"));
+      writeFileSync(join(testSkillsDir, "plan", "SKILL.md"), WORKFLOW_SKILL);
+
+      const skills = discoverSkills(testSkillsDir);
+
+      expect(findSkill(skills, "PLAN")?.id).toBe("plan");
+      expect(findSkill(skills, "missing")).toBeUndefined();
+    });
+
+    it("discovers the repository's own workflow skills, which is what the pipeline loads", () => {
+      const skills = discoverSkills(join(repoRoot, ".agents", "skills"));
+      const ids = skills.map((s) => s.id);
+
+      expect(ids).toContain("plan");
+      expect(ids).toContain("work");
+
+      const plan = findSkill(skills, "plan");
+      const work = findSkill(skills, "work");
+      if (!plan || !work) throw new Error("workflow skills missing from .agents/skills");
+
+      const planBundle = loadSkillBundle(plan, { modules: ["generate", "tasks"] });
+      expect(planBundle.included).toEqual(["generate", "tasks"]);
+
+      const workBundle = loadSkillBundle(work, { modules: ["execute"] });
+      expect(workBundle.included).toEqual(["execute"]);
+      // Neither bundle may smuggle the interactive gates the pipeline overrides.
+      expect(planBundle.text).toContain("deterministic pipeline");
     });
   });
 

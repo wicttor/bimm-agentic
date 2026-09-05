@@ -3,8 +3,11 @@
 // `node agent/src/index.ts --spec specs/car-inventory.md [--dry-run ...]`
 // `node agent/src/index.ts trace replay <traceDir> [--out <outDir>] [--verbose]`
 //
-// Orchestrates the full generation pipeline: config → scaffold → plan → generate → repair → validate.
-// Wires up provider adapters, the planner, generator, repair loop, and tracer.
+// Orchestrates the full pipeline in autopilot: config → scaffold → **plan skill** (Scope → Research
+// → Design → Generate → Tasks, always emitting task artifacts) → **work skill** executed per task
+// artifact → status bookkeeping. Wires up provider adapters, the planner, the executor and the
+// tracer. Intermediate phase dumps (`.scope/`, `.research/`, `.design/`, `.work/`) are not written;
+// the durable outputs are the plan document, the task files, the generated app and one work report.
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -20,6 +23,8 @@ import type { LlmProvider } from "./llm/provider.ts";
 import { scaffold } from "./scaffold.ts";
 import { plan } from "./plan.ts";
 import { generate } from "./generator.ts";
+import { writePlanArtifacts } from "./plan-artifacts.ts";
+import { recordWorkOutcomes, type WorkOutcome } from "./work-artifacts.ts";
 import { deriveRules } from "./prompts/exemplars.ts";
 
 /** Minimal surface a provider must satisfy; the real adapters land in T03. */
@@ -77,8 +82,10 @@ function createDefaultProvider(config: AgentConfig, env: Record<string, string |
 }
 
 /**
- * Main orchestration: scaffold → plan → generate.
- * Runs the core generation pipeline.
+ * Main orchestration: scaffold → plan (plan skill, autopilot, Tasks phase always on) →
+ * generate (work skill's Execute phase, one task artifact per call) → status bookkeeping.
+ * The durable outputs are the plan document, the task artifacts, the generated app and one
+ * closing work report; no intermediate phase dumps are written.
  */
 async function orchestrate(
   spec: string,
@@ -104,9 +111,9 @@ async function orchestrate(
     const rules = deriveRules();
     log("✓ Rules derived");
 
-    // 3. Plan tasks
-    log("Planning tasks from spec...");
-    const planResult = await plan({ spec, rules, provider });
+    // 3. Plan tasks — the plan skill's five phases, run in one autopilot pass
+    log("Planning tasks from spec (plan skill: Scope -> Research -> Design -> Generate -> Tasks)...");
+    const planResult = await plan({ spec, rules, provider, skillsDir: config.skillsDir });
     if (!planResult.ok) {
       error(`Planning failed: ${planResult.error.code} — ${planResult.error.message}`);
       return EXIT_GENERATION_ERROR;
@@ -114,14 +121,61 @@ async function orchestrate(
     const tasks = planResult.tasks;
     log(`✓ Planned ${tasks.length} tasks`);
 
-    // 4. Generate all tasks
-    log("Generating files...");
+    // 4. Register the plan: plan document + task artifacts, always (Tasks phase is never skipped)
+    const artifactResult = writePlanArtifacts({
+      artifactsDir: config.artifactsDir,
+      spec,
+      specPath: config.spec,
+      tasks,
+    });
+    const taskArtifacts = new Map<string, { taskId: string; path: string }>();
+    if (!artifactResult.ok) {
+      error(`Plan artifacts not written: ${artifactResult.error} — continuing with generation`);
+    } else {
+      const artifacts = artifactResult.artifacts;
+      for (const artifact of artifacts.tasks) taskArtifacts.set(artifact.file, { taskId: artifact.taskId, path: artifact.path });
+      log(`✓ Plan artifact: ${artifacts.planPath}`);
+      log(`✓ ${artifacts.tasks.length} task artifact(s): ${artifacts.taskIndexPath}`);
+    }
+
+    // 5. Execute every task — the work skill's Execute phase, one task artifact per call
+    log("Executing tasks (work skill: Red -> Green -> Refactor per task artifact)...");
     const genResult = await generate(spec, rules, provider, { outDir: config.out }, tasks, {
       maxIterations: config.maxIterations,
+      skillsDir: config.skillsDir,
+      taskArtifacts,
     });
     log(
-      `✓ Generation complete: ${genResult.successCount} succeeded, ${genResult.failureCount} failed`,
+      `✓ Execution complete: ${genResult.successCount} succeeded, ${genResult.failureCount} failed`,
     );
+
+    // 6. Bookkeeping: task statuses, index checkboxes, and the single work report
+    if (artifactResult.ok) {
+      const byFile = new Map(artifactResult.artifacts.tasks.map((a) => [a.file, a]));
+      const outcomes: WorkOutcome[] = genResult.taskResults.map((result) => {
+        const artifact = byFile.get(result.task.file);
+        return {
+          taskId: artifact?.taskId ?? artifactResult.artifacts.planId,
+          label: artifact?.label ?? "T??",
+          taskPath: artifact?.path ?? "",
+          status: result.ok ? "completed" : "blocked",
+          reason: result.ok ? undefined : `${result.failureReason ?? "failed"}: ${result.error?.message ?? "see log"}`,
+        };
+      });
+      const record = recordWorkOutcomes({
+        taskIndexPath: artifactResult.artifacts.taskIndexPath,
+        outcomes,
+        planId: artifactResult.artifacts.planId,
+        totalTasks: tasks.length,
+        notes: [
+          `Plan artifact: ${artifactResult.artifacts.planPath}`,
+          `Generated app: ${config.out}`,
+          `Tasks: ${genResult.successCount} succeeded, ${genResult.failureCount} failed`,
+        ],
+      });
+      for (const problem of record.errors) error(`Work bookkeeping: ${problem}`);
+      log(`✓ Task artifacts updated (${record.taskFilesUpdated.length})`);
+    }
 
     if (genResult.failureCount > 0) {
       error(`Generation has ${genResult.failureCount} failing tasks`);
@@ -168,6 +222,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     // Short-circuit BEFORE any provider instantiation: zero HTTP calls by construction.
     log("dry-run: configuration resolved; planning path complete with 0 HTTP calls (no provider instantiated).");
     log(`dry-run: spec=${config.spec} out=${config.out} provider=${config.provider} model=${config.model} max-retries=${config.maxRetries} max-iterations=${config.maxIterations}`);
+    log(`dry-run: skills=${config.skillsDir} artifacts=${config.artifactsDir} mode=autopilot tasks-always-generated=true`);
     return EXIT_OK;
   }
 

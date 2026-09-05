@@ -44,6 +44,7 @@ import {
   type Prompt,
 } from "../src/prompts/exemplars.ts";
 import { TASK_PLAN_JSON_SCHEMA, buildPlannerPrompt } from "../src/prompts/planner.ts";
+import { validateTaskPlan } from "../src/plan-schema.ts";
 import { buildGeneratorPrompt, type GenerationTask } from "../src/prompts/generator.ts";
 import { buildRepairPrompt, type RepairPromptInput } from "../src/prompts/repair.ts";
 import type { ValidationError } from "../src/validate.ts";
@@ -575,6 +576,62 @@ describe("buildGeneratorPrompt", () => {
     const userTurn = prompt.messages[0];
     expect(userTurn?.role === "user" ? userTurn.text : "").toContain(CARD_TASK.file);
   });
+
+  it("runs the work skill in autopilot for this one task, and never writes its phase dumps", () => {
+    const prompt = buildGeneratorPrompt({ task: CARD_TASK, spec: "SPEC TEXT", rules: fixtureRules() });
+    const text = promptText(prompt);
+
+    expect(prompt.system).toContain("Workflow skill:");
+    expect(prompt.system).toContain("`work`");
+    expect(prompt.system).toContain("Interaction mode: **autopilot**");
+    expect(prompt.system).toContain("docs/plans/.work/.triage/");
+    expect(prompt.system).toContain("docs/plans/.work/.review/");
+    expect(prompt.system).toContain("Phase module: execute");
+    // Scoped to one task: no re-planning, no sibling tasks.
+    expect(text).toContain("scoped to exactly one task");
+  });
+
+  it("is test-first: the task's test file is written before its implementation file", () => {
+    const prompt = buildGeneratorPrompt({ task: CARD_TASK, spec: "SPEC TEXT", rules: fixtureRules() });
+    const userTurn = prompt.messages[0];
+    const text = userTurn?.role === "user" ? userTurn.text : "";
+
+    expect(text).toContain("src/components/CarCard.test.tsx");
+    expect(text).toContain("Red \u2014 Write the failing test");
+    expect(text).toContain("Green \u2014 Implement");
+    expect(text).toContain("3. **Refactor:**");
+    expect(text).toContain("Acceptance Criterion");
+    // Order is the point: the test path appears before the implementation path in the ask.
+    expect(text.indexOf("CarCard.test.tsx")).toBeLessThan(text.lastIndexOf("CarCard.tsx"));
+  });
+
+  it("uses a test task's own file as its test instead of inventing a sibling", () => {
+    const prompt = buildGeneratorPrompt({ task: HOOK_TASK, spec: "SPEC TEXT", rules: fixtureRules() });
+    const text = promptText(prompt);
+    expect(text).toContain("this task's file is its test");
+    expect(text).not.toContain("CarCard.test.test.tsx");
+  });
+
+  it("honours the planner's own acceptance criterion and steps when it supplies them", () => {
+    const task: GenerationTask = {
+      ...CARD_TASK,
+      acceptanceCriterion: "The card picks the desktop image at 1200px",
+      testFile: "src/components/CarCard.pick.test.tsx",
+      steps: ["RED: assert the picked src", "GREEN: implement the picker", "REFACTOR: extract the media query"],
+    };
+    const text = promptText(buildGeneratorPrompt({ task, spec: "SPEC TEXT", rules: fixtureRules() }));
+
+    expect(text).toContain("The card picks the desktop image at 1200px");
+    expect(text).toContain("src/components/CarCard.pick.test.tsx");
+    expect(text).toContain("RED: assert the picked src");
+    expect(text).toContain("REFACTOR: extract the media query");
+  });
+
+  it("can be built without skill injection, for callers that pass an empty skills dir", () => {
+    const prompt = buildGeneratorPrompt({ task: CARD_TASK, spec: "SPEC TEXT", rules: fixtureRules(), skillsDir: "" });
+    expect(prompt.system).not.toContain("Workflow skill:");
+    expect(prompt.system).toContain(RULE.compiler);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -607,12 +664,87 @@ describe("buildPlannerPrompt", () => {
 
   it("advertises exactly the schema it exports, so planner and validator cannot diverge", () => {
     expect(TASK_PLAN_JSON_SCHEMA.required).toEqual(["file", "purpose", "dependsOn", "exports"]);
+    // The four generation keys stay the whole required set; the Tasks-phase keys are additive and
+    // optional, so an answer with only the four is still a valid plan.
     expect(Object.keys(TASK_PLAN_JSON_SCHEMA.properties).sort()).toEqual([
+      "acceptanceCriterion",
       "dependsOn",
+      "effort",
       "exports",
       "file",
+      "priority",
       "purpose",
+      "steps",
+      "testFile",
+      "title",
+      "unit",
     ]);
+    // The validator is driven by this same object, so it accepts the schema's own optional keys.
+    expect(
+      validateTaskPlan({
+        file: "src/App.tsx",
+        purpose: "App shell",
+        dependsOn: [],
+        exports: ["App"],
+        title: "Wire the app shell",
+        unit: "U3",
+        acceptanceCriterion: "App renders the list and the form",
+        testFile: "src/App.test.tsx",
+        steps: ["red", "green", "refactor"],
+        priority: "P0",
+        effort: "2 hours",
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validateTaskPlan({
+        file: "src/App.tsx",
+        purpose: "App shell",
+        dependsOn: [],
+        exports: ["App"],
+        unknownFutureKey: { anything: true },
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validateTaskPlan({ file: "src/A.ts", purpose: "A", dependsOn: [], exports: [], steps: "red" }),
+    ).not.toEqual({ ok: true });
+  });
+
+  it("runs the plan skill in autopilot: task slicing always on, no phase dumps, no questions", () => {
+    const system = buildPlannerPrompt({ spec: "SPEC TEXT", rules: fixtureRules() }).system;
+
+    expect(system).toContain("Workflow skill:");
+    expect(system).toContain("`plan`");
+    expect(system).toContain("Interaction mode: **autopilot**");
+    expect(system).toContain("never ask a question");
+    expect(system).toContain("Phase 5 (Tasks) is never skipped");
+    // The one-AC / one-test invariants the Tasks phase produces.
+    expect(system).toContain("One Acceptance Criterion per task");
+    expect(system).toContain("One test per task");
+    // Intermediate artifacts are skipped, and the skip is stated rather than assumed.
+    expect(system).toContain("docs/plans/.scope/");
+    expect(system).toContain("docs/plans/.research/");
+    expect(system).toContain("docs/plans/.design/");
+    expect(system).toContain("Do NOT write these intermediate phase artifacts");
+  });
+
+  it("carries the skill's own words, so editing the skill edits the agent", () => {
+    const system = buildPlannerPrompt({ spec: "SPEC TEXT", rules: fixtureRules() }).system;
+    // Phrases that exist only in .agents/skills/plan, not in this repository's prompt modules.
+    expect(system).toContain("Scope -> Research -> Design -> Generate -> Tasks");
+    expect(system).toContain("Phase module: generate");
+    expect(system).toContain("Phase module: tasks");
+  });
+
+  it("closes with the output contract restated after the skill body", () => {
+    const system = buildPlannerPrompt({ spec: "SPEC TEXT", rules: fixtureRules() }).system;
+    const reminder = "Final note on output format";
+    expect(system.indexOf(reminder)).toBeGreaterThan(system.indexOf("Workflow skill:"));
+  });
+
+  it("can be built without skill injection, for callers that pass an empty skills dir", () => {
+    const system = buildPlannerPrompt({ spec: "SPEC TEXT", rules: fixtureRules(), skillsDir: "" }).system;
+    expect(system).not.toContain("Workflow skill:");
+    expect(system).toContain("Planning constraints:");
   });
 
   it("sends the spec as the user turn and the rules as the system prompt", () => {

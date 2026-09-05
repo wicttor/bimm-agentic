@@ -15,6 +15,20 @@ export interface Task {
   purpose: string;
   dependsOn: string[];
   exports: string[];
+  /**
+   * Tasks-phase (plan skill Phase 5) fields. All optional: the four keys above are the generation
+   * contract, these are what turns a plan entry into a handoff-ready task artifact. When the model
+   * omits them, `plan-artifacts.ts` derives deterministic fallbacks rather than dropping the task.
+   */
+  title?: string;
+  unit?: string;
+  acceptanceCriterion?: string;
+  /** The one test file that proves this task's acceptance criterion. */
+  testFile?: string;
+  /** Red -> Green -> Refactor, in that order. */
+  steps?: string[];
+  priority?: string;
+  effort?: string;
 }
 
 /** Error from the planner. */
@@ -33,6 +47,12 @@ export interface PlanInput {
   spec: string;
   rules: DerivedRules;
   provider: LlmProvider;
+  /**
+   * Skills directory carrying the `plan` skill (default `.agents/skills`). The planner runs the
+   * skill's five phases in one autopilot pass; a missing directory degrades to the built-in
+   * planner contract instead of failing the run.
+   */
+  skillsDir?: string;
 }
 
 /** Tool definition for write_plan. */
@@ -171,18 +191,34 @@ function topologicalSort(tasks: any[]): any[] {
 
 /** Normalize a task, filling in optional fields. */
 function normalizeTask(task: any): Task {
-  return {
+  const normalized: Task = {
     file: task.file,
     purpose: task.purpose,
     dependsOn: task.dependsOn || [],
     exports: task.exports || [],
   };
+
+  // Tasks-phase fields pass through only when present, so a bare four-key plan entry stays bare
+  // and the artifact renderer's fallbacks are distinguishable from the model's own choices.
+  if (typeof task.title === "string" && task.title) normalized.title = task.title;
+  if (typeof task.unit === "string" && task.unit) normalized.unit = task.unit;
+  if (typeof task.acceptanceCriterion === "string" && task.acceptanceCriterion) {
+    normalized.acceptanceCriterion = task.acceptanceCriterion;
+  }
+  if (typeof task.testFile === "string" && task.testFile) normalized.testFile = task.testFile;
+  if (Array.isArray(task.steps)) {
+    normalized.steps = task.steps.filter((s: unknown) => typeof s === "string" && s.length > 0);
+  }
+  if (typeof task.priority === "string" && task.priority) normalized.priority = task.priority;
+  if (typeof task.effort === "string" && task.effort) normalized.effort = task.effort;
+
+  return normalized;
 }
 
 /** Plan the spec into a dependency-ordered task list. */
 export async function plan(input: PlanInput): Promise<PlanResult> {
   const { spec, rules, provider } = input;
-  const prompt = buildPlannerPrompt({ spec, rules });
+  const prompt = buildPlannerPrompt({ spec, rules, skillsDir: input.skillsDir });
 
   const messages: Message[] = prompt.messages;
   const system = prompt.system;

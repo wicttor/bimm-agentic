@@ -1,11 +1,18 @@
 // Skill discovery and injection (task 2026-09-04-001-T15).
 //
-// Discovers skills from agent/skills/*/SKILL.md, parses frontmatter to extract metadata,
-// and provides utilities to render a skill index and inject matched skill bodies into prompts.
-// A missing or empty agent/skills/ directory is a no-op with no error.
+// Discovers skills from `<skillsDir>/*/SKILL.md` (default `.agents/skills`, where the repository's
+// own workflow skills live: plan, work, learn, review), parses frontmatter to extract metadata,
+// and provides utilities to render a skill index, inject matched skill bodies into prompts, and
+// load a skill's **phase modules** (`<skillDir>/modules/<phase>.md`) as one bounded bundle.
+// A missing or empty skills directory is a no-op with no error.
+//
+// Arreio skills (`plan`, `work`) carry only `name` + `description` in frontmatter and no
+// `when-to-use`, because they are invoked explicitly rather than matched to a task. `when-to-use`
+// is therefore optional: present when a skill wants condition-based injection, absent when it
+// wants name-based selection (`loadSkillBundle` by id).
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 /**
  * Metadata extracted from a skill's frontmatter.
@@ -13,7 +20,7 @@ import { join } from "node:path";
  *   ---
  *   name: <identifier>
  *   description: <short description>
- *   when-to-use: <condition or trigger>
+ *   when-to-use: <condition or trigger>   # optional; absent for explicitly-invoked skills
  *   ---
  *   # Body
  *   ... markdown content ...
@@ -25,7 +32,10 @@ export interface SkillMeta {
   name: string;
   /** One-line description (from frontmatter). */
   description: string;
-  /** Trigger condition or context where this skill applies (from frontmatter). */
+  /**
+   * Trigger condition or context where this skill applies (from frontmatter).
+   * Empty string for skills with no `when-to-use` key — those are selected by name, not matched.
+   */
   whenToUse: string;
   /** The body of the skill file (markdown content after frontmatter). */
   body: string;
@@ -118,10 +128,11 @@ export function discoverSkills(skillsDir: string): SkillMeta[] {
 
         const { meta, body } = parsed;
 
-        // Validate required fields
-        if (!meta.name || !meta.description || !meta["when-to-use"]) {
+        // Validate required fields. `when-to-use` is optional: explicitly-invoked skills
+        // (the repository's own plan/work skills) are addressed by id instead.
+        if (!meta.name || !meta.description) {
           console.warn(
-            `[Skills] Missing required fields in ${entry.name}/SKILL.md (requires: name, description, when-to-use); skipping.`
+            `[Skills] Missing required fields in ${entry.name}/SKILL.md (requires: name, description); skipping.`
           );
           continue;
         }
@@ -130,7 +141,7 @@ export function discoverSkills(skillsDir: string): SkillMeta[] {
           id: entry.name,
           name: meta.name,
           description: meta.description,
-          whenToUse: meta["when-to-use"],
+          whenToUse: meta["when-to-use"] ?? "",
           body,
           filePath: skillPath,
         });
@@ -188,6 +199,93 @@ export function loadSkillBody(meta: SkillMeta): string {
     // Fallback to cached body if file can't be read
     return meta.body;
   }
+}
+
+/** Default cap for a rendered skill bundle, in bytes (~14k tokens at 4 chars/token). */
+export const DEFAULT_SKILL_BUNDLE_MAX_BYTES = 56_000;
+
+/** Options for `loadSkillBundle`. */
+export interface SkillBundleOptions {
+  /**
+   * Phase module basenames to append, resolved as `<skillDir>/modules/<name>.md`, in the order
+   * given. Omit for the SKILL.md body alone. Modules that do not exist or do not fit the byte
+   * budget are reported in `omitted` rather than silently dropped.
+   */
+  modules?: string[];
+  /** Maximum rendered size in bytes (default `DEFAULT_SKILL_BUNDLE_MAX_BYTES`). */
+  maxBytes?: number;
+}
+
+/** What `loadSkillBundle` produced: the text, plus an honest account of what it left out. */
+export interface SkillBundle {
+  /** Rendered markdown: SKILL.md body followed by the included phase modules. */
+  text: string;
+  /** Module names actually included, in the order requested. */
+  included: string[];
+  /** `{ name, reason }` for every module not included. */
+  omitted: { name: string; reason: "missing" | "over-budget" | "read-error" }[];
+  /** Bytes in `text`. */
+  bytes: number;
+}
+
+/**
+ * Loads a skill plus selected phase modules as one bounded prompt bundle.
+ *
+ * Skills are written for a human orchestrator who can open `modules/scope.md` when the pipeline
+ * reaches Scope. A single LLM call cannot, so the modules that matter for this call are inlined —
+ * and the byte budget keeps that bounded, reporting whatever had to be dropped.
+ */
+export function loadSkillBundle(
+  meta: SkillMeta,
+  options: SkillBundleOptions = {}
+): SkillBundle {
+  const maxBytes = options.maxBytes ?? DEFAULT_SKILL_BUNDLE_MAX_BYTES;
+  const skillDir = dirname(meta.filePath);
+
+  const base = loadSkillBody(meta);
+  let text = base;
+  let bytes = base.length;
+  const included: string[] = [];
+  const omitted: SkillBundle["omitted"] = [];
+
+  // De-duplicate while preserving the caller's order.
+  const requested = [...new Set(options.modules ?? [])];
+
+  for (const name of requested) {
+    const modulePath = join(skillDir, "modules", `${name}.md`);
+    if (!existsSync(modulePath)) {
+      omitted.push({ name, reason: "missing" });
+      continue;
+    }
+
+    let raw: string;
+    try {
+      raw = readFileSync(modulePath, "utf-8");
+    } catch {
+      omitted.push({ name, reason: "read-error" });
+      continue;
+    }
+
+    const body = parseFrontmatter(raw)?.body ?? raw;
+    const section = `\n\n#### Phase module: ${name} (${meta.id}/modules/${name}.md)\n\n${body}`;
+
+    if (bytes + section.length > maxBytes) {
+      omitted.push({ name, reason: "over-budget" });
+      continue;
+    }
+
+    text += section;
+    bytes += section.length;
+    included.push(name);
+  }
+
+  return { text, included, omitted, bytes };
+}
+
+/** Find a discovered skill by directory id or frontmatter name (case-insensitive). */
+export function findSkill(skills: SkillMeta[], id: string): SkillMeta | undefined {
+  const needle = id.toLowerCase();
+  return skills.find((s) => s.id.toLowerCase() === needle || s.name.toLowerCase() === needle);
 }
 
 /**

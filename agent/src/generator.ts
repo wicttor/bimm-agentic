@@ -9,7 +9,8 @@ import { join } from "node:path";
 import { agentLoop } from "./agent-loop.ts";
 import { buildContext, type DependencyOutput } from "./context.ts";
 import type { DerivedRules } from "./prompts/exemplars.ts";
-import type { LlmProvider, ToolDefinition } from "./llm/provider.ts";
+import { buildGeneratorPrompt } from "./prompts/generator.ts";
+import type { LlmProvider, Message, ToolDefinition } from "./llm/provider.ts";
 import type { Task } from "./plan.ts";
 import { TOOL_DEFINITIONS, type ToolContext } from "./tools/registry.ts";
 
@@ -21,6 +22,10 @@ export interface TaskResult {
   ok: boolean;
   /** If ok, the generated file content. */
   generatedContent?: string;
+  /** Contents of every file this task wrote (its own file plus its test), for trace/debug. */
+  writtenFiles?: string[];
+  /** Repository-relative path of the task artifact this run executed, when one was written. */
+  taskArtifact?: string;
   /** If not ok, the failure reason ('max_iterations', 'error', etc). */
   failureReason?: string;
   /** Detailed error if present. */
@@ -51,6 +56,32 @@ export interface GeneratorOptions {
   maxIterations?: number;
   /** Token budget per task (default 16000). */
   contextBudgetTokens?: number;
+  /**
+   * Skills directory carrying the `work` skill, executed per task (default `.agents/skills`).
+   * An empty string disables injection.
+   */
+  skillsDir?: string;
+  /**
+   * Task artifacts from the plan skill's Tasks phase, keyed by the production file each task owns.
+   * When present the executor's ask is prefixed with that task artifact's id, so the plan, the
+   * artifact and the executed call are traceable to each other. Optional: library callers and tests
+   * may drive the loop with a bare task list.
+   */
+  taskArtifacts?: Map<string, { taskId: string; path: string }>;
+}
+
+/** Paths the model wrote through `write_file`, in call order (test first, then implementation). */
+function writtenPathsFrom(messages: Message[]): string[] {
+  const paths: string[] = [];
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    for (const call of message.toolCalls ?? []) {
+      if (call.name !== "write_file") continue;
+      const path = (call.args as Record<string, unknown> | undefined)?.path;
+      if (typeof path === "string") paths.push(path);
+    }
+  }
+  return paths;
 }
 
 /**
@@ -94,11 +125,11 @@ export async function generate(
     }
 
     // Build context for this task
-    let contextText: string;
     let contextLog: string[] = [];
+    let contextReport: { omitted: { name: string }[] } | undefined;
     try {
       const contextResult = buildContext(spec, task, rules, dependencyOutputs, contextBudgetTokens);
-      contextText = contextResult.contextText;
+      contextReport = contextResult.report;
       if (contextResult.report.omitted.length > 0) {
         contextLog.push(`Context builder omitted ${contextResult.report.omitted.length} items due to token budget`);
       }
@@ -117,29 +148,39 @@ export async function generate(
       continue;
     }
 
-    // Build the task prompt
-    const taskPrompt = `
-Task: ${task.purpose}
-File: ${task.file}
+    // Assemble the ask with the prompt library (T07), which carries the work skill. The context
+    // builder above decides which dependency outputs fit the token budget; the ones it elided are
+    // left out of the prompt too, so the budget is enforced rather than just measured.
+    const omittedDeps = new Set(
+      (contextReport?.omitted ?? [])
+        .filter((o) => o.name.startsWith("Dependency: "))
+        .map((o) => o.name.slice("Dependency: ".length)),
+    );
+    const fittedDeps = dependencyOutputs
+      .filter((d) => !omittedDeps.has(d.file))
+      // The context builder's shape is `{ file, content }`; the prompt library's is
+      // `{ file, contents }`. One mapping, and the two modules keep their own names.
+      .map((d) => ({ file: d.file, contents: d.content }));
 
-Context:
-${contextText}
-
-Generate the file ${task.file} with all necessary implementation.
-Use write_file to write the complete file content.
-Do not stop until you have successfully written the file using the write_file tool.
-`.trim();
+    const artifact = options.taskArtifacts?.get(task.file);
+    const prompt = buildGeneratorPrompt({ task, spec, rules, dependencyOutputs: fittedDeps, skillsDir: options.skillsDir });
+    const taskArtifactNote = artifact ? `Task artifact: ${artifact.taskId} (${artifact.path})\n\n` : "";
+    const initialMessage = `${taskArtifactNote}${prompt.messages[0]?.role === "user" ? prompt.messages[0].text : ""}`;
 
     // Run the agent loop
     contextLog.push(`Running agent loop for ${task.file}...`);
     const loopResult = await agentLoop(
-      "You are a code generation assistant. Generate files according to the specification and context.",
-      taskPrompt,
+      prompt.system,
+      initialMessage,
       provider,
       TOOL_DEFINITIONS as ToolDefinition[],
       toolContext,
       { maxIterations },
     );
+
+    // Which files this task actually wrote, in the order the model wrote them (test first, then
+    // implementation, when the task owns both).
+    const writtenFiles = writtenPathsFrom(loopResult.messages);
 
     // Extract generated content from messages
     let generatedContent: string | undefined;
@@ -159,6 +200,8 @@ Do not stop until you have successfully written the file using the write_file to
       task,
       ok: loopResult.ok,
       generatedContent,
+      writtenFiles,
+      taskArtifact: artifact?.path,
       log: contextLog.concat(loopResult.log),
     };
 

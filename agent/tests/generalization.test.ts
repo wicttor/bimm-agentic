@@ -12,8 +12,8 @@
 // 5. Commits the sample output for reproducibility
 
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { scaffold } from "../src/scaffold.ts";
 import { plan } from "../src/plan.ts";

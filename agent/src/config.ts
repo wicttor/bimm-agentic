@@ -29,6 +29,13 @@ export interface AgentConfig {
   dryRun: boolean;
   /** Path to the skills directory for skill discovery and injection (repo-relative). */
   skillsDir: string;
+  /**
+   * Directory the plan skill's durable artifacts are written to (repo-relative): the final plan at
+   * `<artifactsDir>/plans/` and the task files at `<artifactsDir>/tasks/<plan-id>/`. These are
+   * workflow records of the run, not part of the generated app, so they live beside the pipeline
+   * rather than inside `--out`.
+   */
+  artifactsDir: string;
 }
 
 export type ConfigResult =
@@ -40,7 +47,9 @@ export const DEFAULTS = {
   out: "generated-app",
   maxRetries: 3,
   maxIterations: 8,
-  skillsDir: "agent/skills",
+  /** The repository's own workflow skills (plan, work, learn, review) are the agent's procedures. */
+  skillsDir: ".agents/skills",
+  artifactsDir: "docs",
 } as const;
 
 /** Default model per provider (overridable with `--model`). */
@@ -66,6 +75,7 @@ const FLAG_NAMES = [
   "--max-iterations",
   "--dry-run",
   "--skills-dir",
+  "--artifacts-dir",
 ] as const;
 
 type Env = Record<string, string | undefined>;
@@ -215,6 +225,12 @@ export function resolveConfig(
       ? skillsDirRaw
       : DEFAULTS.skillsDir;
 
+  const artifactsDirRaw = flags.get("--artifacts-dir");
+  const artifactsDir =
+    typeof artifactsDirRaw === "string" && artifactsDirRaw.length > 0
+      ? artifactsDirRaw
+      : DEFAULTS.artifactsDir;
+
   return {
     ok: true,
     config: {
@@ -226,6 +242,7 @@ export function resolveConfig(
       maxIterations,
       dryRun,
       skillsDir,
+      artifactsDir,
     },
   };
 }
