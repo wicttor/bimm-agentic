@@ -73,3 +73,17 @@
 - **Learnings to capture:** 6 (run `/learn` to persist; closes the T04-scope half of the `fs-readonly-invariants` gap)
 - **Incidents:** (1) my own M7 mutation ran `rm -rf /tmp` before the fixture root was nested — `/tmp` emptied ~00:50 UTC, repo untouched (git diff empty); (2) M8 left `src/.scaffolded` debris during mutation runs (now caught by whole-tree hash snapshot, cleaned manually before commit); (3) two of my git commit attempts raced in parallel, one absorbed by `index.lock`, no work lost — external automation shipped the staged test edits as `3b5ff83`
 - **Work Report:** docs/plans/.work/.review/2026-09-05-001-review.md
+
+## Work Report — 2026-09-05-002-review
+
+- **Status:** complete
+- **Work branch:** work/cli-agentic-code-generator
+- **Tasks:** 1/1 completed, 0 for-review, 0 blocked, 0 skipped (scope: `2026-09-04-001-T05` only)
+- **Gate decision:** Gate passed — clean regression check, no scope creep
+- **Regression check:** clean (app 2/2 · agent 76/76 · both typechecks exit 0)
+- **Test strength:** Red assertion-level (20/21); 3/3 guard mutations killed (confine, allow-list membership, byte cap); smuggle + no-leak + configurability asserted
+- **Scope creep:** none (exactly `files.create` 3 + `files.test` 1 + task/index registration; deliberate `reject()` helper non-consolidation documented)
+- **Learnings to capture:** 6 (run `/learn` to persist; opens the `path-sandbox-invariants` gap doc)
+- **Carry-forward:** T06 consumes `execution_failed` details; T10 wires `executeTool`+`toToolMessage` into the loop
+- **Incidents:** (1) entry tree carried a parallel T04-review session's uncommitted edits — surfaced to the user, committed as `db488c3`+`3b5ff83` before Triage, no silent carry; (2) none during execution
+- **Work Report:** docs/plans/.work/.review/2026-09-05-002-review.md
