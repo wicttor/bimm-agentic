@@ -60,3 +60,15 @@ sandboxed, non-interactive call is the injection layer's job.
 - Do not extend the boundary rule to the `plan` block: the planner call has no filesystem tools at all
   (only `WRITE_PLAN_TOOL`), so its `docs/…` durable outputs are already unreachable-but-harmless and
   are consumed by the harness.
+
+## Work Report — 2026-09-05-005-review
+
+- **Status:** complete
+- **Tasks:** 2/2 completed, 0 for-review, 0 blocked, 0 skipped
+- **Regression check:** clean (agent 288 → 297 tests, 19 files; app suite and both typechecks green)
+- **Scope creep:** none
+- **Learnings to capture:** 4 (run `/learn` to persist)
+- **Work Report:** docs/plans/.work/.review/2026-09-05-005-review.md
+- **Branch:** `work/skill-block-sandbox-boundary`, created from HEAD rather than `main` — see the report's
+  "Branch and Commit Boundary" section: these two commits must merge with
+  `work/agent-cli-state-and-sandbox-boundary`, not ahead of it.
