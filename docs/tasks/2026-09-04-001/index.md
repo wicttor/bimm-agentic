@@ -100,3 +100,18 @@
 - **Learnings to capture:** 5 (run `/learn` to persist; closes `machine-readable-validation-output`, opens `real-process-tests-in-ci`)
 - **Carry-forward:** T11 consumes `ValidationResult.errors` (project-relative `file` + `code`) and must treat `error !== null` as "not measured" rather than "clean"; T13's e2e depends on `defaultRunScript`'s machine-readable flags
 - **Work Report:** docs/plans/.work/.review/2026-09-05-003-review.md
+
+## Work Report — 2026-09-05-004-review
+
+- **Status:** complete
+- **Work branch:** work/cli-agentic-code-generator
+- **Tasks:** 1/1 completed, 0 for-review, 0 blocked, 0 skipped (scope: `2026-09-04-001-T07` only)
+- **Gate decision:** Gate passed — clean regression check; no un-sanctioned scope findings (the run created exactly `files.create` 4 + `files.test` 1; the two findings are inside `files.create` and documented)
+- **Regression check:** clean (app 2/2 · agent 160/160 · both typechecks exit 0; +57 tests, zero prior test edited, reference tree byte-identical to `HEAD`); 12-mutation table re-run after the refactor, 12/12 caught
+- **Test strength:** 57 AC tests; drift proven on a synthetic tree *and* a copy of the real boilerplate (6 knobs: type field, operation export, image width, tier count, strict flag, handler list); complementary payload-ban test proves no rule payload — including the slot names — sits in the prompt modules' text
+- **Scope creep:** none beyond the task's own files (findings: five strict flags derive where the AC says four, because the app really enables `noFallthroughCasesInSwitch`; `__typename` derives from the test exemplar since the seed fixtures carry none; two seams — `dependencyOutputs`, exported `TASK_PLAN_JSON_SCHEMA` — added inside `files.create` for named dependents T08/T09)
+- **Pipeline note:** Triage/Prepare did not run (direct task-file request), so `prepare-id`/`triage-id` are `null` in both artifacts and the orchestrator's cross-phase consistency gate is unsatisfiable for this run; baseline taken at entry instead
+- **Learnings to capture:** 5 (run `/learn` to persist; opens `prompt-contract-derivation`, re-opens `agent-runtime-portability`)
+- **Incidents:** (1) I ran the two mutation harnesses as parallel tool calls against the same files — they raced, one aborted on a match count only the sibling explains, and both outputs' red counts were untrustworthy; discarded, tree verified by diff + fingerprint grep, re-run sequentially, 160/160 re-confirmed; (2) the brief attached to the request was not the task file (extra sections, Open Q naming `src/magic-drawer.ts`/`src/ui.ts` from another project) — surfaced, not treated as scope
+- **Carry-forward:** T08 consumes `TASK_PLAN_JSON_SCHEMA` (validate against the contract the prompt advertises); T09/T10 call `deriveRules` once and pass one `DerivedRules` to all three builders; T13/T14 rely on the payload-ban + renamed-slot tests as the "not Car-hardcoded" evidence
+- **Work Report:** docs/plans/.work/.review/2026-09-05-004-review.md

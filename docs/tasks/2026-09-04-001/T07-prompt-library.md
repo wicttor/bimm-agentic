@@ -98,8 +98,9 @@ Each prompt builder renders the boilerplate's non-negotiable rules — import `G
   (T08 validates against the contract the prompt advertises) and `DerivedRules`/`renderRules` (T09/T10
   derive once, share one block across all three roles). `buildRepairPrompt` defaults `maxAttempts` to
   T02's `DEFAULTS.maxRetries` rather than repeating the number.
-- **Test strength:** 56 AC tests, 12 injected defects — all caught (6 derivation, 6 builder; mutation
-  table in the Execution Log). Drift is proven twice: against a synthetic temp tree and against a temp
+- **Test strength:** 57 AC tests, 12 injected defects — all caught, and the table re-run after the
+  review-pass refactor (6 derivation, 6 builder; mutation table in the Execution Log, re-run counts in
+  the Work Report). Drift is proven twice: against a synthetic temp tree and against a temp
   copy of the real boilerplate, each mutation read back from disk before its result is interpreted. The
   one assertion-level Red caveat: `exemplars.ts` was implemented before the sentinel-stub Red run (the
   builders' types depend on it), so 18 of the 49 red-gate tests were already green and 31 failed on
