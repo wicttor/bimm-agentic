@@ -60,3 +60,16 @@
 - **Learnings to capture:** 6 (run `/learn` to persist; closes the adapter half of the `llm-integration` gap)
 - **Branch note:** T03 commits were merged/pushed to `main` mid-run by the repo's session-end automation; `main` = work branch = `585be34`, no rewrite (see Work Report)
 - **Work Report:** docs/plans/.work/.review/2026-09-04-003-review.md
+
+## Work Report — 2026-09-05-001-review
+
+- **Status:** complete
+- **Work branch:** work/cli-agentic-code-generator
+- **Tasks:** 1/1 completed, 0 for-review, 0 blocked, 0 skipped (scope: `2026-09-04-001-T04` only)
+- **Gate decision:** Gate passed — clean regression check, no scope creep
+- **Regression check:** clean (app 2/2 · agent 55/55 · both typechecks exit 0; reference `src/` byte-identical to HEAD)
+- **Test strength:** 10 injected defects all caught (clobber guard, segment exclusion, deep-copy, missing-source guard ×2, source-overlap guard, ancestor guard, copy-subset widening, reference-tree stray-write, fileCount). See Work Report mutation table.
+- **Scope creep:** none (5 surfaced scope notes: `--force` CLI flag gap, source-overlap `invalid-output` guard, `missing-source` reason, `vite-env.d.ts` not copied → T06 risk, success-shape `copied`/`fileCount` fields — all carried forward with tests, never silently)
+- **Learnings to capture:** 6 (run `/learn` to persist; closes the T04-scope half of the `fs-readonly-invariants` gap)
+- **Incidents:** (1) my own M7 mutation ran `rm -rf /tmp` before the fixture root was nested — `/tmp` emptied ~00:50 UTC, repo untouched (git diff empty); (2) M8 left `src/.scaffolded` debris during mutation runs (now caught by whole-tree hash snapshot, cleaned manually before commit); (3) two of my git commit attempts raced in parallel, one absorbed by `index.lock`, no work lost — external automation shipped the staged test edits as `3b5ff83`
+- **Work Report:** docs/plans/.work/.review/2026-09-05-001-review.md
