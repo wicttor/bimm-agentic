@@ -18,6 +18,7 @@ This is the index of planning documents for the project. It serves as a central 
 | --- | --- | --- | --- | --- | --- | --- |
 | [2026-09-04-001](2026-09-04-001-cli-agentic-code-generator.md) | Build a CLI Agentic Code Generator (spec -> React+TS app) | deep | deep | VERY_HIGH | High | ready |
 | [2026-09-05-001](2026-09-05-001-agent-runs-plan-and-work-skills.md) | The agent/ CLI runs the plan and work skills (autopilot, task files always) | deep | deep | HIGH | Medium | ready |
+| [2026-09-05-003](2026-09-05-003-per-task-agent-sessions-with-git-commits.md) | Split the agent pipeline into per-task sessions with git-commit boundaries | deep | deep | HIGH | High | ready |
 
 ## Session Ends
 
