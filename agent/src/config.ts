@@ -23,6 +23,8 @@ export interface AgentConfig {
   maxIterations: number;
   /** Resolve everything and stop; never instantiates a provider or touches the network. */
   dryRun: boolean;
+  /** Path to the skills directory for skill discovery and injection (repo-relative). */
+  skillsDir: string;
 }
 
 export type ConfigResult = { ok: true; config: AgentConfig } | { ok: false; error: string };
@@ -32,6 +34,7 @@ export const DEFAULTS = {
   out: "generated-app",
   maxRetries: 3,
   maxIterations: 8,
+  skillsDir: "agent/skills",
 } as const;
 
 /** Default model per provider (overridable with `--model`). */
@@ -54,6 +57,7 @@ const FLAG_NAMES = [
   "--max-retries",
   "--max-iterations",
   "--dry-run",
+  "--skills-dir",
 ] as const;
 
 type Env = Record<string, string | undefined>;
@@ -178,6 +182,12 @@ export function resolveConfig(argv: string[], env: Env = process.env): ConfigRes
   const outRaw = flags.get("--out");
   const out = typeof outRaw === "string" && outRaw.length > 0 ? outRaw : DEFAULTS.out;
 
+  const skillsDirRaw = flags.get("--skills-dir");
+  const skillsDir =
+    typeof skillsDirRaw === "string" && skillsDirRaw.length > 0
+      ? skillsDirRaw
+      : DEFAULTS.skillsDir;
+
   return {
     ok: true,
     config: {
@@ -188,6 +198,7 @@ export function resolveConfig(argv: string[], env: Env = process.env): ConfigRes
       maxRetries,
       maxIterations,
       dryRun,
+      skillsDir,
     },
   };
 }
