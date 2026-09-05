@@ -1,0 +1,21 @@
+{
+  "spec": "variant-rename.md",
+  "tasks": [
+    {
+      "file": "src/useBooks.ts",
+      "purpose": "GraphQL hook for book data"
+    },
+    {
+      "file": "src/AddBookForm.tsx",
+      "purpose": "Add book form component"
+    },
+    {
+      "file": "src/BookList.tsx",
+      "purpose": "Book list component"
+    },
+    {
+      "file": "src/__tests__/BookList.test.tsx",
+      "purpose": "Tests for BookList"
+    }
+  ]
+}

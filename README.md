@@ -235,6 +235,47 @@ npm run dev
 
 ---
 
+## Agent Implementation & Architecture
+
+This project contains a complete implementation of the agentic code generation system described above.
+
+### Key Documentation
+
+- **[Agent Architecture & Design](docs/plans/architectures/cli-agentic-architecture.md)** — Comprehensive overview of the two-loop design, component responsibilities, data contracts, failure modes, mitigation strategies, cost analysis, and generalization strategy.
+
+- **[Variant Spec Example](docs/examples/variant-specs/variant-rename.md)** — Demonstrates spec-driven generalization: a "Book Inventory Manager" spec that generates structurally different code from the Car Inventory, proving the agent is not domain-hardcoded.
+
+- **[Sample Output (Car Inventory)](docs/samples/e2e/run-2026-09-05T04-47-08/generated-app/)** — A fully generated and tested React + TypeScript application produced from the Car Inventory spec.
+
+- **[Variant Sample Output (Book Inventory)](docs/samples/variant/variant-run-2026-09-05/generated-app/)** — Generated output from the variant spec, verifying generalization.
+
+### Running the Agent
+
+```bash
+# Generate from the Car Inventory spec
+export ANTHROPIC_API_KEY=sk-ant-...  # Set your API key
+npx ts-node agent/src/index.ts --spec specs/car-inventory.md --out generated-app
+
+# Or test with a variant spec
+npx ts-node agent/src/index.ts --spec docs/examples/variant-specs/variant-rename.md --out generated-book
+
+# Verify output
+cd generated-app
+npm run typecheck && npm run test
+```
+
+### Agent Tests
+
+```bash
+# Run all agent tests
+npm run agent:test
+
+# Run generalization test
+npm run agent:test -- generalization.test.ts
+```
+
+---
+
 ## Questions?
 
 If anything is ambiguous, make a reasonable assumption and document it in your README. We value clear thinking over asking for clarification on every detail.
