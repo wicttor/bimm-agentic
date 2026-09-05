@@ -1,6 +1,7 @@
 // CLI entry point for the agent (task 2026-09-04-001-T02).
 //
 // `node agent/src/index.ts --spec specs/car-inventory.md [--dry-run ...]`
+// `node agent/src/index.ts trace replay <traceDir> [--out <outDir>] [--verbose]`
 //
 // Responsibilities of this slice: parse flags, resolve config (agent/src/config.ts),
 // verify the spec exists, and fail loudly with a specific error **before** any provider
@@ -12,6 +13,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { resolveConfig, type AgentConfig } from "./config.ts";
+import { handleTraceCommand } from "./trace-cli.ts";
 
 /** Minimal surface a provider must satisfy; the real adapters land in T03. */
 export interface ProviderLike {
@@ -40,6 +42,11 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
   const env = deps.env ?? process.env;
   const log = deps.log ?? ((line: string) => console.log(line));
   const error = deps.error ?? ((line: string) => console.error(line));
+
+  // Handle subcommands
+  if (argv.length > 0 && argv[0] === "trace") {
+    return handleTraceCommand(argv.slice(1), { log, error });
+  }
 
   const resolved = resolveConfig(argv, env);
   if (!resolved.ok) {
