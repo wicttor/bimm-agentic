@@ -4,7 +4,7 @@ title: "Prove the two-skill pipeline end to end, offline"
 plan-id: 2026-09-05-001
 unit: U7
 tier: deep
-status: not-started
+status: completed
 priority: P1
 dependencies: [2026-09-05-001-T09, 2026-09-05-001-T11, 2026-09-05-001-T13]
 files:
@@ -44,7 +44,7 @@ One `run()` invocation with a scripted provider scaffolds, plans through the `pl
 
 ## Acceptance Criteria
 
-- [ ] One `run()` invocation with a scripted provider scaffolds, plans through the `plan` skill, writes the plan and task artifacts, executes every task through the `work` skill, and records outcomes
+- [x] One `run()` invocation with a scripted provider scaffolds, plans through the `plan` skill, writes the plan and task artifacts, executes every task through the `work` skill, and records outcomes
 
 ## Dependencies
 
@@ -57,3 +57,21 @@ One `run()` invocation with a scripted provider scaffolds, plans through the `pl
 - Implemented in the working tree (plan → artifacts → execute → bookkeeping in `index.ts`) but unproven end to end; this is the task that closes it.
 - Learning applied: `docs/learn/gotcha/scripted-fake-exhaustion-mimics-adapter-bug.md` — script exactly plan + (iterations × tasks) responses.
 - Learning applied: `docs/learn/pattern/dry-run-zero-network-proven-by-injection-spies.md` — provider spy proves no HTTP.
+
+## Closed
+
+- 2026-09-05T17:56Z — `agent/tests/pipeline-skills.test.ts` (9 scenarios) drives one `run(argv, deps)` call per scenario through
+  `FakeProvider`: happy path (scaffold → plan document in autopilot → two task files `status: completed` with AC boxes ticked →
+  index checklist ticked → exactly one `## Work Report` block, `2/2 completed`), both `write_plan` argument shapes
+  (`{ tasks: [...] }` and a bare array), `--skills-dir` plumbing, dirty `--out` refused, max-iterations task ends `blocked` with exit 3,
+  unwritable `--artifacts-dir` logged as one error while the app is still generated, `--dry-run` instantiating no provider, and a
+  config error writing nothing. Zero network is proven by a counting `globalThis.fetch` spy, and the scripted replies are sized
+  exactly (`1 + tasks × 3`) so an unplanned model call throws instead of looping.
+- Provenance asserted on the rendered requests: request 1's system turn carries `` Workflow skill: `plan` `` and every executor
+  request's carries `` Workflow skill: `work` `` — never `plan`.
+- Refactor (step 3): `orchestrate()` now folds a throwing `writePlanArtifacts` into the same single logged error as its `{ ok: false }`
+  result, so unwritable artifacts are obvious in the trace and never abort the generated app.
+- Mutation-checked: dropping `skillsDir` from the planner or executor call fails the `--skills-dir` plumbing test; skipping the
+  bookkeeping step fails three scenarios. The first draft of this file had two assertions that passed vacuously (the prompt builders
+  default `skillsDir`, and `- file:` legitimately names the implementation before its test) — both were rewritten to bite.
+- Gate: `npm run agent:typecheck` exit 0; `npm run agent:test` 288/288 (baseline at plan time: 274).

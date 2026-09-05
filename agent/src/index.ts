@@ -23,7 +23,7 @@ import type { LlmProvider } from "./llm/provider.ts";
 import { scaffold } from "./scaffold.ts";
 import { plan } from "./plan.ts";
 import { generate } from "./generator.ts";
-import { writePlanArtifacts } from "./plan-artifacts.ts";
+import { writePlanArtifacts, type PlanArtifacts, type WritePlanArtifactsResult } from "./plan-artifacts.ts";
 import { recordWorkOutcomes, type WorkOutcome } from "./work-artifacts.ts";
 import { deriveRules } from "./prompts/exemplars.ts";
 
@@ -121,21 +121,31 @@ async function orchestrate(
     const tasks = planResult.tasks;
     log(`✓ Planned ${tasks.length} tasks`);
 
-    // 4. Register the plan: plan document + task artifacts, always (Tasks phase is never skipped)
-    const artifactResult = writePlanArtifacts({
-      artifactsDir: config.artifactsDir,
-      spec,
-      specPath: config.spec,
-      tasks,
-    });
+    // 4. Register the plan: plan document + task artifacts, always (Tasks phase is never skipped).
+    // A failure here is logged once, with its reason, and the run continues: the generated app is
+    // the pipeline's product, so losing the record of a plan must not lose the app. Bookkeeping is
+    // then skipped because there is nothing to update.
+    let artifactResult: WritePlanArtifactsResult;
+    try {
+      artifactResult = writePlanArtifacts({
+        artifactsDir: config.artifactsDir,
+        spec,
+        specPath: config.spec,
+        tasks,
+      });
+    } catch (cause) {
+      const reason = cause instanceof Error ? cause.message : String(cause);
+      artifactResult = { ok: false, error: reason };
+    }
     const taskArtifacts = new Map<string, { taskId: string; path: string }>();
-    if (!artifactResult.ok) {
-      error(`Plan artifacts not written: ${artifactResult.error} — continuing with generation`);
+    let written: PlanArtifacts | null = null;
+    if (artifactResult.ok) {
+      written = artifactResult.artifacts;
+      for (const artifact of written.tasks) taskArtifacts.set(artifact.file, { taskId: artifact.taskId, path: artifact.path });
+      log(`✓ Plan artifact: ${written.planPath}`);
+      log(`✓ ${written.tasks.length} task artifact(s): ${written.taskIndexPath}`);
     } else {
-      const artifacts = artifactResult.artifacts;
-      for (const artifact of artifacts.tasks) taskArtifacts.set(artifact.file, { taskId: artifact.taskId, path: artifact.path });
-      log(`✓ Plan artifact: ${artifacts.planPath}`);
-      log(`✓ ${artifacts.tasks.length} task artifact(s): ${artifacts.taskIndexPath}`);
+      error(`Plan artifacts not written: ${artifactResult.error} — continuing with generation`);
     }
 
     // 5. Execute every task — the work skill's Execute phase, one task artifact per call
@@ -149,13 +159,15 @@ async function orchestrate(
       `✓ Execution complete: ${genResult.successCount} succeeded, ${genResult.failureCount} failed`,
     );
 
-    // 6. Bookkeeping: task statuses, index checkboxes, and the single work report
-    if (artifactResult.ok) {
-      const byFile = new Map(artifactResult.artifacts.tasks.map((a) => [a.file, a]));
+    // 6. Bookkeeping: task statuses, index checkboxes, and the single work report.
+    // Skipped when the artifacts were never written — there is no record to update.
+    const artifacts = written;
+    if (artifacts) {
+      const byFile = new Map(artifacts.tasks.map((a) => [a.file, a]));
       const outcomes: WorkOutcome[] = genResult.taskResults.map((result) => {
         const artifact = byFile.get(result.task.file);
         return {
-          taskId: artifact?.taskId ?? artifactResult.artifacts.planId,
+          taskId: artifact?.taskId ?? artifacts.planId,
           label: artifact?.label ?? "T??",
           taskPath: artifact?.path ?? "",
           status: result.ok ? "completed" : "blocked",
@@ -163,12 +175,12 @@ async function orchestrate(
         };
       });
       const record = recordWorkOutcomes({
-        taskIndexPath: artifactResult.artifacts.taskIndexPath,
+        taskIndexPath: artifacts.taskIndexPath,
         outcomes,
-        planId: artifactResult.artifacts.planId,
+        planId: artifacts.planId,
         totalTasks: tasks.length,
         notes: [
-          `Plan artifact: ${artifactResult.artifacts.planPath}`,
+          `Plan artifact: ${artifacts.planPath}`,
           `Generated app: ${config.out}`,
           `Tasks: ${genResult.successCount} succeeded, ${genResult.failureCount} failed`,
         ],

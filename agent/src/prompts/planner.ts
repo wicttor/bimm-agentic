@@ -141,30 +141,38 @@ function planningConstraints(): string[] {
 
 /**
  * Restated after the skill body, which is the last thing in the system turn and the only part of
- * the prompt that talks about writing markdown artifacts. Without it, "produce the Final Plan
- * artifact" reads like an instruction to answer in prose.
+ * the prompt that talks about writing markdown artifacts. This must override that and be clear about tool usage.
  */
 const OUTPUT_CONTRACT_REMINDER =
-  "Final note on output format: the plan skill's artifact templates describe what the harness writes to disk from your answer. Your answer itself is ONLY the bare JSON array of task objects defined above — no markdown, no plan document, no prose, no wrapper object.";
+  "Final note on output format: the plan skill's artifact templates describe what the harness writes to disk from the task array you generate. Your answer itself is ONLY a write_plan tool call whose 'tasks' parameter contains the array of task objects — no markdown, no plan document, no prose, no text outside the tool call.";
 
 /** The role, the contract, and the rules — nothing a model should have to guess. */
 function plannerSystem(rules: DerivedRules, skillBlock = ""): string {
   const schema = JSON.stringify(TASK_PLAN_JSON_SCHEMA, null, 2);
-  return [
+  const baseSystem = [
     "You are the planning stage of a code-generation agent. You decompose one specification into an ordered list of file-level tasks, and you do nothing else: you never write code, never name a file you are not going to create, and never explain your reasoning.",
     "",
-    "CRITICAL: Answer with ONLY a bare JSON array of task objects. No wrapper object. No prose. No markdown code fence.",
-    "WRONG: {\"tasks\": [...]} or {\"plan\": [...]}  |  RIGHT: [{...}, {...}]",
+    "CRITICAL: You MUST call the write_plan tool with the task array as the 'tasks' parameter. Do not output raw JSON directly. Always use the tool.",
+    "WRONG: bare JSON array  |  RIGHT: Call write_plan with tasks parameter",
     "",
-    "Each array element must satisfy this JSON Schema exactly:",
+    "Each task object must satisfy this JSON Schema exactly:",
     "",
     schema,
     "",
     ...planningConstraints(),
     "",
     renderRules(rules),
-    ...(skillBlock === "" ? [] : ["", skillBlock, "", OUTPUT_CONTRACT_REMINDER]),
-  ].join("\n");
+  ];
+  
+  // Add skill block if present; OUTPUT_CONTRACT_REMINDER is always last and overrides it
+  if (skillBlock !== "") {
+    baseSystem.push("", skillBlock);
+  }
+  
+  // ALWAYS append the contract reminder last — it overrides the skill block's prose instructions
+  baseSystem.push("", OUTPUT_CONTRACT_REMINDER);
+  
+  return baseSystem.join("\n");
 }
 
 /** The spec, framed as the ask, with the answer shape restated where the model reads it last. */
@@ -174,7 +182,7 @@ function plannerUser(spec: string): string {
     "",
     spec.trim(),
     "",
-    `DECOMPOSE IT. Reply with ONLY the JSON array (no wrapper, no explanation). Start directly with [ and end with ].`,
+    `DECOMPOSE IT. Call the write_plan tool with the task array (no explanation, no other text). Use ONLY the tool call.`,
   ].join("\n");
 }
 

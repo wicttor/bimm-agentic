@@ -4,7 +4,7 @@ title: "Document the skill-driven pipeline and what a run skips"
 plan-id: 2026-09-05-001
 unit: U7
 tier: deep
-status: not-started
+status: completed
 priority: P2
 dependencies: [2026-09-05-001-T14]
 files:
@@ -41,7 +41,7 @@ the next contributor needs to know which files are generated versus hand-written
 
 ## Acceptance Criteria
 
-- [ ] `agent/README.md` documents the plan→work wiring, the `--artifacts-dir` flag, the `.agents/skills` default for `--skills-dir`, and what a run deliberately does not write; `agent/skills/README.md` states that `when-to-use` is optional
+- [x] `agent/README.md` documents the plan→work wiring, the `--artifacts-dir` flag, the `.agents/skills` default for `--skills-dir`, and what a run deliberately does not write; `agent/skills/README.md` states that `when-to-use` is optional
 
 ## Dependencies
 
@@ -50,3 +50,20 @@ the next contributor needs to know which files are generated versus hand-written
 ## Notes
 
 - `agent/README.md`'s directory listing still names `tools/file-ops.ts` and `tools/inspect.ts`, which do not exist; fix them in passing or open a follow-up.
+
+## Closed
+
+- 2026-09-05T17:57Z — `agent/README.md`: new **Skill-Driven Pipeline: plan → work** section (which skill each call runs, which phase
+  modules it inlines, what the prompts pin, and that the proof lives in `agent/tests/pipeline-skills.test.ts`) and a
+  **What a run writes — and what it deliberately skips** section naming `.scope/`, `.research/`, `.design/`, `.work/.triage|.prepare|.
+  execute|.review` and `docs/learn/` as skipped, with the reason. The Data Flow list now runs through the two skills and the artifact
+  steps; the flag table gained `--artifacts-dir` (default `docs`) and the correct `--skills-dir` default (`.agents/skills`, was
+  wrongly documented as `agent/skills`); `openrouter` added to providers, models and env vars; invocation switched from the absent
+  `ts-node` to `npx tsx`; watch mode documented as a direct `npx vitest` call because no `agent:test:watch` script exists; the stale
+  `tools/file-ops.ts` / `tools/inspect.ts` listing replaced with `tools/registry.ts`, `fs.ts` and `shell.ts`; the Cost Analysis numbers
+  marked as pre-dating skill injection.
+- 2026-09-05T17:57Z — `agent/skills/README.md`: `when-to-use` is now documented as **optional** (with `name` + `description` the only
+  required pair, `whenToUse` defaulting to `""`, and name-invoked skills such as `plan` and `work` selecting by id instead of matching),
+  the directory reference corrected to `.agents/skills`, and `<skillDir>/modules/<phase>.md` plus the reported-omission behaviour added.
+- Documentation-only task, so the assertions are read by eye against the two files; the claims were checked against
+  `agent/src/config.ts` (`DEFAULTS`), `agent/src/skill-prompts.ts` (`SKILL_BLOCK_MAX_BYTES`, module lists) and `agent/src/skills.ts`.

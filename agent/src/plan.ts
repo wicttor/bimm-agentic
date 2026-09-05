@@ -62,12 +62,37 @@ export const WRITE_PLAN_TOOL = {
   parameters: {
     type: "object",
     properties: {
-      // The tool's argument IS the array itself, so we accept an array as the parameter.
-      // This is a bit unconventional but matches how we force tool calls with full arrays as args.
+      tasks: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            file: { type: "string" },
+            purpose: { type: "string" },
+            dependsOn: { type: "array", items: { type: "string" } },
+            exports: { type: "array", items: { type: "string" } },
+          },
+          required: ["file", "purpose", "dependsOn", "exports"],
+        },
+        description: "Array of task objects following the task plan schema",
+      },
     },
-    additionalProperties: true,
+    required: ["tasks"],
+    additionalProperties: false,
   },
 };
+
+/**
+ * The `write_plan` argument, in either shape a model may deliver it: the declared
+ * `{ tasks: [...] }` object, or a bare task array (the shape the earlier prompt contract asked for).
+ * Validation reads the array; the re-ask messages echo the raw argument back untouched, so this
+ * helper is only ever consulted for the payload, never for the transcript.
+ */
+function taskArrayFrom(args: Record<string, unknown> | undefined): unknown {
+  if (!args) return undefined;
+  const wrapped: unknown = (args as { tasks?: unknown }).tasks;
+  return Array.isArray(wrapped) ? wrapped : args;
+}
 
 /** Detect if tasks have cyclic dependencies using DFS. */
 function detectCycle(tasks: any[]): string[] | null {
@@ -235,6 +260,7 @@ export async function plan(input: PlanInput): Promise<PlanResult> {
   let writeplanCall = response.toolCalls.find(
     (call) => call.name === "write_plan",
   );
+  // Accept both `{ tasks: [...] }` and a bare array; keep the raw args for the transcript.
   let planData = writeplanCall?.args;
 
   // Re-ask loop: if validation fails, send back the error and re-ask once
@@ -298,7 +324,7 @@ export async function plan(input: PlanInput): Promise<PlanResult> {
     }
 
     // Validate the plan data
-    validation = validateTaskArray(planData);
+    validation = validateTaskArray(taskArrayFrom(planData));
     if (!validation.ok) {
       if (attempts < maxAttempts) {
         // Re-ask with the validation error
@@ -343,7 +369,8 @@ export async function plan(input: PlanInput): Promise<PlanResult> {
     break;
   }
 
-  if (!validation || !validation.ok || !planData || !Array.isArray(planData)) {
+  const planPayload = taskArrayFrom(planData);
+  if (!validation || !validation.ok || !Array.isArray(planPayload)) {
     return {
       ok: false,
       error: {

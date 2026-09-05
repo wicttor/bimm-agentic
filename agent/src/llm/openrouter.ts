@@ -104,7 +104,13 @@ function toOpenRouterRequestBody(
   const tools = toOpenRouterTools(request.tools);
   if (tools.length > 0) {
     body["tools"] = tools;
-    body["tool_choice"] = "auto";
+    // Force tool choice when there's exactly one tool (common for structured generation). The name
+    // is read off the request's own `ToolDefinition`, not off the mapped wire object, whose
+    // `function` field is untyped `WireJson` and cannot be indexed for a `name`.
+    const only = tools.length === 1 ? request.tools?.[0] : undefined;
+    body["tool_choice"] = only
+      ? { type: "function", function: { name: only.name } }
+      : "auto";
   }
   if (request.temperature !== undefined)
     body["temperature"] = request.temperature;

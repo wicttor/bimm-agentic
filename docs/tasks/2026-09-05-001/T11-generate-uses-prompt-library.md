@@ -4,7 +4,7 @@ title: "Drive the loop from the prompt library and report what was written"
 plan-id: 2026-09-05-001
 unit: U6
 tier: deep
-status: not-started
+status: completed
 priority: P1
 dependencies: [2026-09-05-001-T10]
 files:
@@ -44,7 +44,7 @@ exemplars and the work skill never reached the model.
 
 ## Acceptance Criteria
 
-- [ ] `generate()` runs `buildGeneratorPrompt` (no ad-hoc system string), still applies the context token budget to dependency outputs, and reports which files a task wrote together with the task artifact it executed
+- [x] `generate()` runs `buildGeneratorPrompt` (no ad-hoc system string), still applies the context token budget to dependency outputs, and reports which files a task wrote together with the task artifact it executed
 
 ## Dependencies
 
@@ -52,5 +52,15 @@ exemplars and the work skill never reached the model.
 
 ## Notes
 
-- Implemented in the working tree (274 tests green) but **without its own assertion**; this task is open until the test exists.
+- The implementation landed in the working tree before this task was written down, but **without its own
+  assertion** — the gap this task existed to close (see `## Closed`).
 - Learning applied: `docs/learn/pattern/test-config-isolation-behaviorally-not-regex.md` — assert on the rendered request, not on the source text.
+
+## Closed
+
+- 2026-09-05T17:56Z — `agent/tests/generator.test.ts` now carries a `Generator — prompt library, token budget and artifact
+  handoff (2026-09-05-001-T11)` block: five scenarios (provenance, `skillsDir: ""` disables the skill block, written-file order,
+  artifact handoff, budget-omitted dependency stays out of the ask).
+- Mutation-checked, not assumption-checked: replacing the library system turn with an ad-hoc string, dropping `writtenFiles`,
+  dropping `taskArtifact` and removing the budget filter each fail the new tests. No production change was needed.
+- Gate: `npm run agent:typecheck` exit 0; `npm run agent:test` 288/288.

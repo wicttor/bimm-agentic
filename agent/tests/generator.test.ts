@@ -428,3 +428,172 @@ describe("Generator — per-task orchestration", () => {
     expect(secondTaskContext).toContain("export const VERSION = '1.0';");
   });
 });
+
+// AC for task 2026-09-05-001-T11: `generate()` runs `buildGeneratorPrompt` (no ad-hoc system
+// string), still applies the context token budget to dependency outputs, and reports which files a
+// task wrote together with the task artifact it executed.
+//
+// Asserted on the rendered request the loop sends — never on the source text of `generator.ts` — so
+// the test survives renaming and still fails if the prompt library is bypassed.
+describe("Generator — prompt library, token budget and artifact handoff (2026-09-05-001-T11)", () => {
+  let outDir: string;
+
+  beforeEach(() => {
+    outDir = mkdtempSync("generator-prompt-library-test-");
+  });
+
+  afterEach(() => {
+    rmSync(outDir, { recursive: true, force: true });
+  });
+
+  const rules = deriveRules({ referenceRoot: "" });
+
+  /** The user turn of request `n` — the ask the model actually received. */
+  function userTurnOf(provider: FakeProvider, n: number): string {
+    const request = provider.requests[n];
+    const message = request?.messages[0];
+    return message && message.role === "user" ? message.text : "";
+  }
+
+  it("provenance: the task request's system turn is the library's — work skill and derived rules included", async () => {
+    const plan: Task[] = [
+      {
+        file: "src/cards/CardList.tsx",
+        purpose: "Render the card grid",
+        dependsOn: [],
+        exports: ["CardList"],
+      },
+    ];
+
+    const provider = new FakeProvider({
+      responses: [
+        {
+          toolCalls: [
+            { name: "write_file", args: { path: "src/cards/CardList.tsx", content: "export const CardList = () => null;" }, id: "c1" },
+          ],
+        },
+        { text: "Written.", toolCalls: [] },
+      ],
+    });
+
+    await generate("SPEC TEXT", rules, provider, { outDir }, plan, { skillsDir: ".agents/skills" });
+
+    const system = provider.requests[0]?.system ?? "";
+    // The `work` skill block: only `buildGeneratorPrompt` renders this heading.
+    expect(system).toContain("Workflow skill:");
+    expect(system).toContain("`work`");
+    // The boilerplate contract: only `renderRules` emits the compiler-options line.
+    expect(system).toContain("Compiler options:");
+    // Red before Green is stated to the model, in the ask.
+    expect(userTurnOf(provider, 0)).toContain("src/cards/CardList.test.tsx");
+  });
+
+  it("skillsDir \"\" disables the skill block without disabling the rest of the prompt", async () => {
+    const plan: Task[] = [
+      { file: "src/cards/CardGrid.tsx", purpose: "Render a grid", dependsOn: [], exports: ["CardGrid"] },
+    ];
+    const provider = new FakeProvider({
+      responses: [
+        { toolCalls: [{ name: "write_file", args: { path: "src/cards/CardGrid.tsx", content: "export const CardGrid = () => null;" }, id: "g1" }] },
+        { text: "Written.", toolCalls: [] },
+      ],
+    });
+
+    await generate("SPEC TEXT", rules, provider, { outDir }, plan, { skillsDir: "" });
+
+    const system = provider.requests[0]?.system ?? "";
+    expect(system).not.toContain("Workflow skill:");
+    expect(system).toContain("Compiler options:");
+  });
+
+  it("written files: the test path is reported before the implementation path, in tool-call order", async () => {
+    const plan: Task[] = [
+      { file: "src/cards/CardList.tsx", purpose: "Render the card grid", dependsOn: [], exports: ["CardList"] },
+    ];
+    const provider = new FakeProvider({
+      responses: [
+        {
+          toolCalls: [
+            { name: "write_file", args: { path: "src/cards/CardList.test.tsx", content: "it('renders', () => {});" }, id: "w1" },
+          ],
+        },
+        {
+          toolCalls: [
+            { name: "write_file", args: { path: "src/cards/CardList.tsx", content: "export const CardList = () => null;" }, id: "w2" },
+          ],
+        },
+        { text: "Done.", toolCalls: [] },
+      ],
+    });
+
+    const result = await generate("SPEC TEXT", rules, provider, { outDir }, plan, { skillsDir: "" });
+
+    expect(result.taskResults[0]?.writtenFiles).toEqual([
+      "src/cards/CardList.test.tsx",
+      "src/cards/CardList.tsx",
+    ]);
+  });
+
+  it("handoff: taskResults[i].taskArtifact is the artifact path keyed by the task's file", async () => {
+    const plan: Task[] = [
+      { file: "src/cards/CardList.tsx", purpose: "Render the card grid", dependsOn: [], exports: ["CardList"] },
+    ];
+    const provider = new FakeProvider({
+      responses: [
+        { toolCalls: [{ name: "write_file", args: { path: "src/cards/CardList.test.tsx", content: "it('renders', () => {});" }, id: "h1" }] },
+        { toolCalls: [{ name: "write_file", args: { path: "src/cards/CardList.tsx", content: "export const CardList = () => null;" }, id: "h2" }] },
+        { text: "Done.", toolCalls: [] },
+      ],
+    });
+
+    const result = await generate("SPEC TEXT", rules, provider, { outDir }, plan, {
+      skillsDir: "",
+      taskArtifacts: new Map([
+        ["src/cards/CardList.tsx", { taskId: "2026-09-05-001-T08", path: "docs/tasks/2026-09-05-001/T08-card-list.md" }],
+      ]),
+    });
+
+    expect(result.taskResults[0]?.taskArtifact).toBe("docs/tasks/2026-09-05-001/T08-card-list.md");
+    // The executed ask names the artifact it executed, so trace and artifact point at each other.
+    expect(userTurnOf(provider, 0).startsWith("Task artifact: 2026-09-05-001-T08 (")).toBe(true);
+  });
+
+  it("budget: a dependency the context builder elided never reaches the ask", async () => {
+    const ELIDED = "export const ELIDED_DEPENDENCY_MARKER = '";
+    const filler = "// padding to make the dependency exceed the budget\n".repeat(80);
+
+    const plan: Task[] = [
+      { file: "src/first.ts", purpose: "First file", dependsOn: [], exports: ["first"] },
+      {
+        file: "src/second.ts",
+        purpose: "Second file that uses first",
+        dependsOn: ["src/first.ts"],
+        exports: ["second"],
+      },
+    ];
+
+    const provider = new FakeProvider({
+      responses: [
+        { toolCalls: [{ name: "write_file", args: { path: "src/first.ts", content: `${ELIDED}marker\`;\n${filler}` }, id: "b1" }] },
+        { text: "First done.", toolCalls: [] },
+        { toolCalls: [{ name: "write_file", args: { path: "src/second.ts", content: "export const second = 2;" }, id: "b2" }] },
+        { text: "Second done.", toolCalls: [] },
+      ],
+    });
+
+    const result = await generate("SPEC TEXT", rules, provider, { outDir }, plan, {
+      skillsDir: "",
+      // Enough for spec + rules, not enough for the oversized dependency: the builder must report
+      // the omission and the prompt must honour it.
+      contextBudgetTokens: 700,
+    });
+
+    expect(result.successCount).toBe(2);
+    const secondAsk = userTurnOf(provider, 2);
+    expect(secondAsk).not.toContain(ELIDED);
+    // The budget was genuinely applied, not silently satisfied by a short dependency: the ask still
+    // says the dependency contents were not supplied.
+    expect(secondAsk).toContain("No contents were supplied for the tasks you depend on");
+    expect(result.taskResults[1]?.log.some((l) => l.includes("omitted"))).toBe(true);
+  });
+});
