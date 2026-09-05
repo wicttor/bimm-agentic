@@ -17,6 +17,7 @@ This is the index of planning documents for the project. It serves as a central 
 | Plan ID | Title | tier | tier_recommended | complexity | risk | status |
 | --- | --- | --- | --- | --- | --- | --- |
 | [2026-09-04-001](2026-09-04-001-cli-agentic-code-generator.md) | Build a CLI Agentic Code Generator (spec -> React+TS app) | deep | deep | VERY_HIGH | High | ready |
+| [2026-09-05-001](2026-09-05-001-agent-runs-plan-and-work-skills.md) | The agent/ CLI runs the plan and work skills (autopilot, task files always) | deep | deep | HIGH | Medium | ready |
 
 ## Session Ends
 
