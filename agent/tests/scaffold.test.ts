@@ -69,6 +69,7 @@ const APP_SUBSET_ENTRIES = [
   "index.html",
   "package.json",
   "tsconfig.json",
+  "vite-env.d.ts",
   "vite.config.ts",
   "vitest.config.ts",
 ];
@@ -166,7 +167,7 @@ describe("scaffold(): fresh copy of the boilerplate app subset", () => {
 
     expect(result.ok).toBe(true);
     expect(readdirSync(out).sort()).toEqual([...APP_SUBSET_ENTRIES].sort());
-    for (const banned of ["node_modules", "agent", "docs", "README.md", "vite-env.d.ts"]) {
+    for (const banned of ["node_modules", "agent", "docs", "README.md"]) {
       expect(existsSync(join(out, banned)), `${banned} must never be copied`).toBe(false);
     }
   });
@@ -189,7 +190,7 @@ describe("scaffold(): fresh copy of the boilerplate app subset", () => {
 
     expect(success.outDir).toBe(out);
     expect(success.copied).toEqual([...DEFAULT_INCLUDE]);
-    expect(success.fileCount).toBe(9); // 3 app files in src/ + 1 in public/ + 5 root files
+    expect(success.fileCount).toBe(10); // 3 app files in src/ + 1 in public/ + 6 root files
   });
 
   it("treats pre-existing output as a clobber to replace, never a merge target", () => {

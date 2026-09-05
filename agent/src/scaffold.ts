@@ -13,13 +13,20 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-/** The app subset that makes a scaffolded copy runnable on its own. */
+/**
+ * The app subset that makes a scaffolded copy runnable on its own.
+ *
+ * `vite-env.d.ts` belongs here because the boilerplate `tsconfig.json` lists it in `include` and
+ * `src/main.tsx` reads `import.meta.env`: without it the copy cannot typecheck, so the validator's
+ * "untouched scaffold is clean" contract (task T06) would be unsatisfiable.
+ */
 export const DEFAULT_INCLUDE = [
   "src",
   "public",
   "index.html",
   "package.json",
   "tsconfig.json",
+  "vite-env.d.ts",
   "vite.config.ts",
   "vitest.config.ts",
 ] as const;
