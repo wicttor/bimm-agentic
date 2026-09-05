@@ -21,6 +21,7 @@ import {
   scaffold,
   type ScaffoldFailure,
   type ScaffoldResult,
+  type ScaffoldSuccess,
 } from "../src/scaffold.ts";
 
 // Acceptance-Criterion test for task 2026-09-04-001-T04 (Scaffolder: boilerplate copy).
@@ -101,9 +102,34 @@ function writeFile(path: string, content: string): void {
   writeFileSync(path, content, "utf8");
 }
 
+/**
+ * Snapshot every file under `dir` as `relative-path<TAB>content-hash`, sorted.
+ *
+ * Proves the read-only invariant for the **whole** tree: comparing two named files byte-for-byte
+ * cannot notice a scaffold that leaves them intact but writes a new file into `src/`.
+ */
+function treeSnapshot(dir: string): string[] {
+  const lines: string[] = [];
+  for (const entry of readdirSync(dir, { recursive: true })) {
+    const rel = entry.toString();
+    const abs = join(dir, rel);
+    if (statSync(abs).isFile()) {
+      lines.push(`${rel}	${createHash("sha1").update(readFileSync(abs)).digest("hex")}`);
+    }
+  }
+  return lines.sort();
+}
+
 function readFailure(result: ScaffoldResult): ScaffoldFailure {
   if (result.ok) {
     throw new Error(`expected scaffold() to fail, got a successful copy of ${result.copied.length} entries`);
+  }
+  return result;
+}
+
+function readSuccess(result: ScaffoldResult): ScaffoldSuccess {
+  if (!result.ok) {
+    throw new Error(`expected scaffold() to succeed, got ${result.reason}: ${result.error}`);
   }
   return result;
 }
@@ -149,26 +175,21 @@ describe("scaffold(): fresh copy of the boilerplate app subset", () => {
     const root = makeFixtureRoot();
     const out = join(root, "generated-app");
 
-    const result = scaffold(root, out, { force: true });
-
-    expect(result.ok).toBe(true);
+    expect(scaffold(root, out).ok).toBe(true);
     const stat = lstatSync(join(out, "src/App.tsx"));
     expect(stat.isSymbolicLink()).toBe(false);
     expect(stat.isFile()).toBe(true);
-    expect(readdirSync(out, { recursive: true }).length).toBeGreaterThan(0);
   });
 
   it("reports the copied entries and the file count", () => {
     const root = makeFixtureRoot();
     const out = join(root, "generated-app");
 
-    const result = scaffold(root, out);
+    const success = readSuccess(scaffold(root, out));
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.outDir).toBe(out);
-    expect(result.copied).toEqual([...DEFAULT_INCLUDE]);
-    expect(result.fileCount).toBe(9); // 3 app files in src/ + 1 in public/ + 5 root files
+    expect(success.outDir).toBe(out);
+    expect(success.copied).toEqual([...DEFAULT_INCLUDE]);
+    expect(success.fileCount).toBe(9); // 3 app files in src/ + 1 in public/ + 5 root files
   });
 
   it("treats pre-existing output as a clobber to replace, never a merge target", () => {
@@ -307,45 +328,25 @@ describe("scaffold(): configurable include/exclude", () => {
     const root = makeFixtureRoot();
     const out = join(root, "generated-app");
 
-    const result = scaffold(root, out, { exclude: [...DEFAULT_EXCLUDE, "mocks"] });
+    const success = readSuccess(scaffold(root, out, { exclude: [...DEFAULT_EXCLUDE, "mocks"] }));
 
-    expect(result.ok).toBe(true);
     expect(existsSync(join(out, "src/App.tsx"))).toBe(true);
     expect(existsSync(join(out, "src/mocks"))).toBe(false);
-    if (result.ok) expect(result.copied).toEqual([...DEFAULT_INCLUDE]);
+    expect(success.copied).toEqual([...DEFAULT_INCLUDE]);
   });
 
   it("honours a custom include list", () => {
     const root = makeFixtureRoot();
     const out = join(root, "generated-app");
 
-    const result = scaffold(root, out, { include: ["src", "index.html"] });
+    const success = readSuccess(scaffold(root, out, { include: ["src", "index.html"] }));
 
-    expect(result.ok).toBe(true);
     expect(existsSync(join(out, "src/types.ts"))).toBe(true);
     expect(existsSync(join(out, "index.html"))).toBe(true);
     expect(existsSync(join(out, "package.json"))).toBe(false);
-    if (result.ok) expect(result.copied).toEqual(["src", "index.html"]);
+    expect(success.copied).toEqual(["src", "index.html"]);
   });
 });
-
-/**
- * Snapshot every file under `dir` as `relative-path + content hash`, sorted.
- *
- * Proves the read-only invariant for the **whole** tree: comparing two named files byte-for-byte
- * cannot notice a scaffold that leaves them intact but writes a new file into `src/`.
- */
-function treeSnapshot(dir: string): string[] {
-  const lines: string[] = [];
-  for (const entry of readdirSync(dir, { recursive: true })) {
-    const rel = entry.toString();
-    const abs = join(dir, rel);
-    if (statSync(abs).isFile()) {
-      lines.push(`${rel}	${createHash("sha1").update(readFileSync(abs)).digest("hex")}`);
-    }
-  }
-  return lines.sort();
-}
 
 describe("scaffold(): reference boilerplate stays read-only", () => {
   it("copies the real app subset without modifying the reference tree", () => {
