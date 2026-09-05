@@ -17,6 +17,16 @@
 //      of this pipeline are exactly three things: the final plan document, the task files, and the
 //      generated code (plus one closing work report line in the task index).
 //
+//   3. **Their sandbox has one root.** The executor's `read_file` / `write_file` / `list_files` reach
+//      only the generated app's output directory, and `run_command` only allow-listed npm scripts
+//      (`agent/src/tools/fs.ts`, `agent/src/tools/shell.ts`). The `work` skill's Pre-Flight Check,
+//      Index Registration and Work Branch steps all reach for `docs/` or `git`, which are outside it —
+//      `docs` is excluded from the scaffold (`DEFAULT_EXCLUDE` in `agent/src/scaffold.ts`). Left
+//      unqualified, the model obeys the skill and takes a refusal it cannot act on; a run log recorded
+//      `not_found` on `list_files("docs/tasks")` for exactly this reason. So the block voids those
+//      sections and names the harness as their owner. This is prompt prose, not a sandbox exception:
+//      nothing under `docs/` is ever made reachable from inside the call.
+//
 // The skill bodies also describe markdown output ("produce a Final Plan artifact"). The model's
 // answer here is consumed by a validator, not a human, so the output contract in the prompt this
 // block is appended to always wins — that precedence is stated, never assumed.
@@ -28,6 +38,18 @@ export const PLAN_SKILL_MODULES = ["generate", "tasks"] as const;
 
 /** Phases of the work skill whose modules the executor call has to reason about. */
 export const WORK_SKILL_MODULES = ["execute"] as const;
+
+/**
+ * The `work` skill's bookkeeping sections, which need a repository the executor cannot see. Named in
+ * the block's overrides so the model leaves them alone instead of probing for them; the harness does
+ * this work around the call (`agent/src/work-artifacts.ts`).
+ */
+export const WORK_HARNESS_OWNED_SECTIONS = [
+  "the Pre-Flight Check over `docs/tasks/` and the `mkdir -p` Self-Healing that follows it",
+  "Index Registration — ticking `docs/tasks/<plan-id>/index.md` and appending its Work Report block",
+  "each task file's `status` frontmatter and its `## Acceptance Criteria` checkbox",
+  "the Work Branch step (`git` branch creation and checkout)",
+] as const;
 
 /** Cap on rendered skill text per prompt, so a growing skill file cannot silently balloon cost. */
 export const SKILL_BLOCK_MAX_BYTES = 40_000;
@@ -50,6 +72,8 @@ function autopilotOverrides(input: {
   skillId: string;
   durableOutputs: readonly string[];
   droppedArtifacts: readonly string[];
+  /** Skill sections the harness performs around this call; empty when nothing is out of reach. */
+  harnessOwned: readonly string[];
   extraRules: readonly string[];
 }): string[] {
   return [
@@ -58,6 +82,12 @@ function autopilotOverrides(input: {
     `Do NOT write these intermediate phase artifacts: ${input.droppedArtifacts
       .map((a) => `\`${a}\``)
       .join(", ")}. Their reasoning still happens, in this single response — only the files are skipped.`,
+    ...(input.harnessOwned.length === 0
+      ? []
+      : [
+          `The harness performs these parts of the skill around this call, not you: ${input.harnessOwned
+            .join("; ")}. Your tools — \`read_file\`, \`write_file\`, \`list_files\`, \`run_command\` — are confined to the generated app's output directory, which holds no \`docs/\` tree and no git repository, and \`run_command\` runs allow-listed npm scripts only. So listing or reading a path under \`docs/\` fails \`not_found\` or \`path_escape\`, a \`git\` command is refused, and those refusals are correct, not an obstacle to route around. Never probe for those folders, never \`mkdir\` a \`docs/\` tree inside the output directory to satisfy the skill, and do not report a bookkeeping step as blocked.`,
+        ]),
     `The durable outputs of this run are: ${input.durableOutputs
       .map((d) => `\`${d}\``)
       .join(", ")}. The harness writes those files for you; you produce the content.`,
@@ -84,10 +114,11 @@ export function buildSkillBlock(input: SkillBlockInput): string {
     skillId: meta.name,
     durableOutputs: isPlan
       ? ["docs/plans/<plan-id>-<kebab-name>.md", "docs/tasks/<plan-id>/TASK-NNN-<kebab-name>.md"]
-      : ["the files named by the current task", "the task's status line in docs/tasks/<plan-id>/index.md"],
+      : ["the files named by the current task"],
     droppedArtifacts: isPlan
       ? ["docs/plans/.scope/", "docs/plans/.research/", "docs/plans/.design/"]
       : ["docs/plans/.work/.triage/", "docs/plans/.work/.prepare/", "docs/plans/.work/.execute/", "docs/plans/.work/.review/"],
+    harnessOwned: isPlan ? [] : WORK_HARNESS_OWNED_SECTIONS,
     extraRules: input.extraRules ?? [],
   });
 
