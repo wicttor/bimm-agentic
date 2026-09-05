@@ -13,7 +13,7 @@
 
 ### Phase 2: Agentic loop (LLM integration; driven offline by FakeProvider)
 
-- [ ] T07 — Prompt library and contract enforcement (`U6`, AC: prompt builders render boilerplate rules by reading reference files, not duplicating prose) — `docs/tasks/2026-09-04-001/T07-prompt-library.md`
+- [x] T07 — Prompt library and contract enforcement (`U6`, AC: prompt builders render boilerplate rules by reading reference files, not duplicating prose) — `docs/tasks/2026-09-04-001/T07-prompt-library.md`
 - [ ] T08 — Planner: spec to dependency-ordered task plan (`U7`, AC: planner returns validated topologically-sorted task list, rejects invalid with one re-ask, fails on cycles) — `docs/tasks/2026-09-04-001/T08-planner.md`
 - [ ] T09 — Context builder with token budget (`U8`, AC: assembles contract + dependency outputs, elides to fit budget, never drops spec/rules, reports omissions) — `docs/tasks/2026-09-04-001/T09-context-builder.md`
 - [ ] T10 — Generator: per-task tool-calling loop (`U9`, AC: FakeProvider drives real write_file calls, loop terminates on response or max-iterations as typed failure) — `docs/tasks/2026-09-04-001/T10-generator.md`
