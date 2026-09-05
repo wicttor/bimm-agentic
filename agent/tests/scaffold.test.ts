@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   existsSync,
   lstatSync,
@@ -6,6 +7,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -76,9 +78,16 @@ function makeTempParent(): string {
   return dir;
 }
 
-/** Build a throwaway repo root that mirrors the boilerplate layout. */
+/**
+ * Build a throwaway repo root that mirrors the boilerplate layout.
+ *
+ * The root is nested one level below the temp parent on purpose: the ancestor-refusal test passes
+ * `dirname(root)` as the output, so that path must be a private disposable directory and never a
+ * shared one like `/tmp` itself.
+ */
 function makeFixtureRoot(): string {
-  const root = makeTempParent();
+  const root = join(makeTempParent(), "repo");
+  mkdirSync(root, { recursive: true });
   for (const [rel, content] of Object.entries(FIXTURE_FILES)) {
     const target = join(root, rel);
     mkdirSync(dirname(target), { recursive: true });
@@ -193,7 +202,8 @@ describe("scaffold(): clobber guard", () => {
     expect(failure.outDir).toBe(out);
     expect(failure.error).toContain("--force");
     expect(failure.error).toContain("generated-app");
-    expect(failure.existing).toContain("src");
+    expect(failure.error).toMatch(/contains: src\b/);
+    expect(readdirSync(out), "the refusal left the directory alone").toEqual(["src"]);
     expect(readFileSync(join(out, "src/App.tsx"), "utf8")).toBe("// hand-edited by someone\n");
   });
 
@@ -221,6 +231,14 @@ describe("scaffold(): clobber guard", () => {
 });
 
 describe("scaffold(): output-directory safety", () => {
+  it("refuses an output directory nested inside a copied source directory", () => {
+    const root = makeFixtureRoot();
+    const out = join(root, "src", "generated-app");
+
+    expect(readFailure(scaffold(root, out, { force: true })).reason).toBe("invalid-output");
+    expect(existsSync(join(root, "src/App.tsx")), "the reference tree survived the refusal").toBe(true);
+  });
+
   it("refuses when the output directory is the repository root itself", () => {
     const root = makeFixtureRoot();
 
@@ -240,12 +258,42 @@ describe("scaffold(): output-directory safety", () => {
   it("reports a missing source entry instead of scaffolding a broken app", () => {
     const root = makeFixtureRoot();
     const out = join(root, "generated-app");
+    // Pre-populated so a partial copy is observable: a refusal must not rewrite what is there.
+    writeFile(join(out, "stale-marker.txt"), "// untouched by a refused scaffold\n");
+    rmSync(join(root, "public"), { recursive: true, force: true });
 
-    const failure = readFailure(scaffold(root, out, { include: ["index.html", "does-not-exist"] }));
+    const failure = readFailure(scaffold(root, out));
 
     expect(failure.reason).toBe("missing-source");
-    expect(failure.error).toContain("does-not-exist");
-    expect(existsSync(join(out, "index.html")), "nothing is written when a source is missing").toBe(false);
+    expect(failure.error).toContain("public");
+    expect(existsSync(join(out, "src")), "nothing is copied when a source is missing").toBe(false);
+    expect(existsSync(join(out, "index.html")), "nothing is copied when a source is missing").toBe(false);
+    expect(readFileSync(join(out, "stale-marker.txt"), "utf8")).toBe("// untouched by a refused scaffold\n");
+  });
+
+  it("validates sources before replacing, so force never destroys output on a missing source", () => {
+    const root = makeFixtureRoot();
+    const out = join(root, "generated-app");
+    writeFile(join(out, "precious.txt"), "// keep me\n");
+    rmSync(join(root, "tsconfig.json"), { force: true });
+
+    const failure = readFailure(scaffold(root, out, { force: true }));
+
+    expect(failure.reason).toBe("missing-source");
+    expect(readFileSync(join(out, "precious.txt"), "utf8")).toBe("// keep me\n");
+  });
+
+  it("reports a missing later entry too, even when the first entries exist", () => {
+    const root = makeFixtureRoot();
+    const out = join(root, "generated-app");
+    writeFile(join(out, "stale-marker.txt"), "// untouched\n");
+    rmSync(join(root, "vitest.config.ts"), { force: true });
+
+    const failure = readFailure(scaffold(root, out));
+
+    expect(failure.reason).toBe("missing-source");
+    expect(failure.error).toContain("vitest.config.ts");
+    expect(existsSync(join(out, "src")), "all sources are validated before any is copied").toBe(false);
   });
 });
 
@@ -281,11 +329,29 @@ describe("scaffold(): configurable include/exclude", () => {
   });
 });
 
+/**
+ * Snapshot every file under `dir` as `relative-path + content hash`, sorted.
+ *
+ * Proves the read-only invariant for the **whole** tree: comparing two named files byte-for-byte
+ * cannot notice a scaffold that leaves them intact but writes a new file into `src/`.
+ */
+function treeSnapshot(dir: string): string[] {
+  const lines: string[] = [];
+  for (const entry of readdirSync(dir, { recursive: true })) {
+    const rel = entry.toString();
+    const abs = join(dir, rel);
+    if (statSync(abs).isFile()) {
+      lines.push(`${rel}	${createHash("sha1").update(readFileSync(abs)).digest("hex")}`);
+    }
+  }
+  return lines.sort();
+}
+
 describe("scaffold(): reference boilerplate stays read-only", () => {
   it("copies the real app subset without modifying the reference tree", () => {
     const appEntry = "src/App.tsx";
     const referenceBefore = readFileSync(join(repoRoot, appEntry));
-    const siblingBefore = readFileSync(join(repoRoot, "src/types.ts"));
+    const srcBefore = treeSnapshot(join(repoRoot, "src"));
     const out = join(makeTempParent(), "generated-app");
 
     const result = scaffold(repoRoot, out);
@@ -295,9 +361,20 @@ describe("scaffold(): reference boilerplate stays read-only", () => {
     expect(existsSync(join(out, "agent"))).toBe(false);
     expect(existsSync(join(out, "docs"))).toBe(false);
     expect(existsSync(join(out, "node_modules"))).toBe(false);
-    const copied = readFileSync(join(out, appEntry));
-    expect(copied.equals(referenceBefore), "copied from the reference, byte-for-byte").toBe(true);
-    expect(readFileSync(join(repoRoot, appEntry)).equals(referenceBefore), "reference src/ never written").toBe(true);
-    expect(readFileSync(join(repoRoot, "src/types.ts")).equals(siblingBefore)).toBe(true);
+    expect(readFileSync(join(out, appEntry)).equals(referenceBefore), "copied byte-for-byte").toBe(true);
+    // The hard invariant: not one file added, removed, or changed anywhere under src/.
+    expect(treeSnapshot(join(repoRoot, "src")), "reference src/ never written to").toEqual(srcBefore);
+  });
+
+  it("leaves the entire source tree untouched, not just the copied files", () => {
+    const root = makeFixtureRoot();
+    const before = treeSnapshot(root);
+    // Output goes next to the fixture root, never inside it, so any new file under `root` is a
+    // stray write by definition rather than the scaffold's own output.
+    const out = join(dirname(root), "generated-app");
+
+    expect(scaffold(root, out).ok).toBe(true);
+
+    expect(treeSnapshot(root), "no stray writes and no deletions anywhere in the source tree").toEqual(before);
   });
 });
