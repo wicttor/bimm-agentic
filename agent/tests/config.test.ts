@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import type { LlmProvider } from "../src/llm/provider.ts";
 
 // Acceptance-Criterion test for task 2026-09-04-001-T02 (CLI entry and config resolution).
 //
@@ -29,15 +30,29 @@ let originalFetch: typeof globalThis.fetch | undefined;
 /** Test-local fake provider (the real `FakeProvider` is T03's file). */
 function makeFakeProviderSpy(): {
   creations: { value: number };
-  factory: (config: { provider: string }) => { name: string };
+  factory: (config: { provider: string }) => LlmProvider;
 } {
   const creations = { value: 0 };
   return {
     creations,
-    factory: (config) => {
+    factory: () => {
       creations.value += 1;
-      // A minimal object satisfying the provider surface — never used for I/O here.
-      return { name: config.provider };
+      // A minimal LlmProvider stub — never used for I/O in these tests.
+      return {
+        name: "fake" as const,
+        model: "test-model",
+        complete: async () => ({
+          text: "",
+          toolCalls: [],
+          stopReason: "stop" as const,
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          },
+        }),
+      };
     },
   };
 }

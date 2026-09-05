@@ -1,19 +1,25 @@
-// CLI entry point for the agent (task 2026-09-04-001-T02).
+// CLI entry point for the agent (task 2026-09-04-001-T02/T13).
 //
 // `node agent/src/index.ts --spec specs/car-inventory.md [--dry-run ...]`
 // `node agent/src/index.ts trace replay <traceDir> [--out <outDir>] [--verbose]`
 //
-// Responsibilities of this slice: parse flags, resolve config (agent/src/config.ts),
-// verify the spec exists, and fail loudly with a specific error **before** any provider
-// is instantiated or any network call is attempted. The generation pipeline itself is
-// wired by later tasks (T03 provider, T10/T11 loop) and is reached via `deps` here.
+// Orchestrates the full generation pipeline: config → scaffold → plan → generate → repair → validate.
+// Wires up provider adapters, the planner, generator, repair loop, and tracer.
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { resolveConfig, type AgentConfig } from "./config.ts";
 import { handleTraceCommand } from "./trace-cli.ts";
+import { AnthropicProvider } from "./llm/anthropic.ts";
+import { OpenAIProvider } from "./llm/openai.ts";
+import { FakeProvider } from "./llm/fake.ts";
+import type { LlmProvider } from "./llm/provider.ts";
+import { scaffold } from "./scaffold.ts";
+import { plan } from "./plan.ts";
+import { generate } from "./generator.ts";
+import { deriveRules } from "./prompts/exemplars.ts";
 
 /** Minimal surface a provider must satisfy; the real adapters land in T03. */
 export interface ProviderLike {
@@ -23,20 +29,111 @@ export interface ProviderLike {
 export interface RunDeps {
   env?: Record<string, string | undefined>;
   /**
-   * Provider factory — called ONLY on the non-dry-run path after config resolution
-   * succeeds. `--dry-run` must short-circuit before this, so tests can assert that a
-   * missing/invalid configuration (or a dry run) instantiates no provider and issues
-   * zero HTTP calls.
+   * Optional provider factory override for testing. If not provided, provider is created
+   * based on config.provider selection.
    */
-  createProvider?: (config: AgentConfig) => ProviderLike;
+  createProvider?: (config: AgentConfig) => LlmProvider;
   log?: (line: string) => void;
   error?: (line: string) => void;
 }
 
-/** Exit codes: 0 = ok, 2 = configuration/spec error, 3 = pipeline not yet wired. */
+/** Exit codes: 0 = ok, 2 = configuration/spec error, 3 = generation error. */
 export const EXIT_OK = 0;
 export const EXIT_CONFIG_ERROR = 2;
-export const EXIT_PIPELINE_UNAVAILABLE = 3;
+export const EXIT_GENERATION_ERROR = 3;
+
+/**
+ * Create a provider based on the config.
+ * Tries to instantiate the selected provider with its API key from environment.
+ * Falls back to FakeProvider if keys are missing (for development/testing).
+ */
+function createDefaultProvider(config: AgentConfig, env: Record<string, string | undefined>): LlmProvider {
+  if (config.provider === "anthropic") {
+    const key = env["ANTHROPIC_API_KEY"];
+    if (key) {
+      return new AnthropicProvider({ model: config.model, apiKey: key });
+    }
+  } else if (config.provider === "openai") {
+    const key = env["OPENAI_API_KEY"];
+    if (key) {
+      return new OpenAIProvider({ model: config.model, apiKey: key });
+    }
+  }
+  // Fall back to FakeProvider for development/testing
+  return new FakeProvider({
+    responses: [
+      {
+        text: "Using FakeProvider for development. Set ANTHROPIC_API_KEY or OPENAI_API_KEY for real runs.",
+        toolCalls: [],
+      },
+    ],
+  });
+}
+
+/**
+ * Main orchestration: scaffold → plan → generate.
+ * Runs the core generation pipeline.
+ */
+async function orchestrate(
+  spec: string,
+  config: AgentConfig,
+  provider: LlmProvider,
+  deps: RunDeps,
+): Promise<number> {
+  const log = deps.log ?? ((line: string) => console.log(line));
+  const error = deps.error ?? ((line: string) => console.error(line));
+
+  try {
+    // 1. Scaffold the output directory
+    log(`Scaffolding output directory: ${config.out}`);
+    const scaffoldResult = scaffold(".", config.out);
+    if (!scaffoldResult.ok) {
+      error(`Scaffold failed: ${scaffoldResult.reason} — ${scaffoldResult.error}`);
+      return EXIT_GENERATION_ERROR;
+    }
+    log("✓ Scaffolded successfully");
+
+    // 2. Derive rules from boilerplate
+    log("Deriving rules from boilerplate...");
+    const rules = deriveRules();
+    log("✓ Rules derived");
+
+    // 3. Plan tasks
+    log("Planning tasks from spec...");
+    const planResult = await plan({ spec, rules, provider });
+    if (!planResult.ok) {
+      error(`Planning failed: ${planResult.error.code} — ${planResult.error.message}`);
+      return EXIT_GENERATION_ERROR;
+    }
+    const tasks = planResult.tasks;
+    log(`✓ Planned ${tasks.length} tasks`);
+
+    // 4. Generate all tasks
+    log("Generating files...");
+    const genResult = await generate(spec, rules, provider, { outDir: config.out }, tasks, {
+      maxIterations: config.maxIterations,
+    });
+    log(
+      `✓ Generation complete: ${genResult.successCount} succeeded, ${genResult.failureCount} failed`,
+    );
+
+    if (genResult.failureCount > 0) {
+      error(`Generation has ${genResult.failureCount} failing tasks`);
+      error("Failed tasks: " + genResult.failedTasks.join(", "));
+      return EXIT_GENERATION_ERROR;
+    }
+
+    log("\n✓ Generation pipeline complete!");
+    return EXIT_OK;
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    error(`Pipeline error: ${message}`);
+    if (cause instanceof Error && cause.stack) {
+      error(cause.stack);
+    }
+    return EXIT_GENERATION_ERROR;
+  }
+}
 
 export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
   const env = deps.env ?? process.env;
@@ -68,21 +165,25 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     return EXIT_OK;
   }
 
-  if (!deps.createProvider) {
-    error(
-      "error: no provider factory available — the generation pipeline is wired by later " +
-        "tasks (T03 adapters, T10/T11 loop). Configuration itself resolved cleanly; " +
-        "use --dry-run to exercise this path offline.",
-    );
-    return EXIT_PIPELINE_UNAVAILABLE;
+  // Read the spec
+  let spec: string;
+  try {
+    spec = readFileSync(specPath, "utf8");
+  } catch (cause) {
+    error(`Failed to read spec: ${cause instanceof Error ? cause.message : String(cause)}`);
+    return EXIT_CONFIG_ERROR;
   }
 
-  deps.createProvider(config);
-  error(
-    "error: provider instantiated, but the generation pipeline is not implemented yet " +
-      "(T10/T11). Nothing was sent to the network.",
-  );
-  return EXIT_PIPELINE_UNAVAILABLE;
+  // Create provider (use override if provided, otherwise use default)
+  let provider: LlmProvider;
+  if (deps.createProvider) {
+    provider = deps.createProvider(config);
+  } else {
+    provider = createDefaultProvider(config, env as Record<string, string | undefined>);
+  }
+
+  // Run the orchestration pipeline
+  return orchestrate(spec, config, provider, deps);
 }
 
 function isDirectExecution(): boolean {
