@@ -58,12 +58,16 @@ export interface GeneratorPromptInput {
   skillsDir?: string;
 }
 
-/** Rules that adapt an interactive, human-gated work session to a single non-interactive call. */
-/** Extras on top of the work skill's generic autopilot overrides, specific to this call. */
+/**
+ * Extras on top of the work skill's generic autopilot overrides, specific to this call.
+ *
+ * Nothing here talks about `docs/`: the boundary between this call and the repository is authored once,
+ * in `skill-prompts.ts`, and restating it here is how the two copies drifted — the skill body promised
+ * the model an index line under `docs/tasks/` that its sandbox can only refuse.
+ */
 function executorSkillRules(): string[] {
   return [
     "You cannot run the test suite from here: the output directory has no installed dependencies yet. The harness runs `npm run typecheck` and `npm run test` after you stop, so honour Red -> Green -> Refactor in the ORDER you write files — the task's test file first, the implementation second — rather than by executing them.",
-    "Do not create any planning artifact under `docs/` yourself: task files, indexes and reports belong to the harness around this call.",
   ];
 }
 

@@ -4,7 +4,7 @@ title: "Say the sandbox boundary once in the assembled executor prompt"
 plan-id: 2026-09-05-007
 unit: U2
 tier: fast
-status: not-started
+status: completed
 priority: P1
 dependencies: [2026-09-05-007-T01]
 files:
@@ -55,7 +55,7 @@ existing generator describe-block in `agent/tests/prompts.test.ts` already makes
 - Unaffected: existing generator prompt assertions (autopilot mode, dropped `.work/` artifacts, `Phase module: execute`, one-task scoping) still pass
 
 ## Acceptance Criteria
-- [ ] `buildGeneratorPrompt` states the sandbox boundary exactly once with the duplicate removed from `executorSkillRules()` — proven in `agent/tests/prompts.test.ts`
+- [x] `buildGeneratorPrompt` states the sandbox boundary exactly once with the duplicate removed from `executorSkillRules()` — proven in `agent/tests/prompts.test.ts`
 
 ## Dependencies
 

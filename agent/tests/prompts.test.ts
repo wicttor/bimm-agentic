@@ -591,6 +591,20 @@ describe("buildGeneratorPrompt", () => {
     expect(text).toContain("scoped to exactly one task");
   });
 
+  it("states the sandbox boundary once, from the skill block alone, with no local duplicate", () => {
+    const prompt = buildGeneratorPrompt({ task: CARD_TASK, spec: "SPEC TEXT", rules: fixtureRules() });
+
+    // One author for one rule: the boundary is rendered by `skill-prompts.ts`, and the weaker copy
+    // `prompts/generator.ts` used to carry is gone. Counted, not `toContain` — a prompt with two
+    // copies of the same prohibition is exactly the drift this assertion exists to catch.
+    expect(prompt.system.match(/harness performs/g)).toHaveLength(1);
+    expect(prompt.system).toContain("Pre-Flight Check");
+    expect(prompt.system).toContain("Index Registration");
+    expect(prompt.system).not.toContain("planning artifact under");
+    // The index line is the harness's, so the prompt must not offer it to the model as an output.
+    expect(prompt.system).not.toContain("the task's status line in docs/tasks/");
+  });
+
   it("is test-first: the task's test file is written before its implementation file", () => {
     const prompt = buildGeneratorPrompt({ task: CARD_TASK, spec: "SPEC TEXT", rules: fixtureRules() });
     const userTurn = prompt.messages[0];

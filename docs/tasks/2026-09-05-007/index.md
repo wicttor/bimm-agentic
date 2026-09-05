@@ -42,7 +42,7 @@ sandboxed, non-interactive call is the injection layer's job.
 ## 2026-09-05-007 — Stop the injected work skill from ordering sandbox-impossible docs/ work
 
 - [x] T01 — Void the harness-owned skill sections in the injected work block (`U1`, AC: the rendered `work` skill block states that Pre-Flight Check, Self-Healing mkdir, Index Registration, Work Report and Work Branch/git are the harness's because the tools are confined to the output directory, and its durable-output list names no path under `docs/`) — `docs/tasks/2026-09-05-007/T01-void-harness-owned-work-skill-sections.md`
-- [ ] T02 — Say the boundary once in the assembled executor prompt (`U2`, AC: the generator system prompt built from the real `.agents/skills` carries the boundary rule exactly once and contains no second copy of the `docs/` prohibition) — `docs/tasks/2026-09-05-007/T02-say-the-boundary-once-in-the-executor-prompt.md`
+- [x] T02 — Say the boundary once in the assembled executor prompt (`U2`, AC: the generator system prompt built from the real `.agents/skills` carries the boundary rule exactly once and contains no second copy of the `docs/` prohibition) — `docs/tasks/2026-09-05-007/T02-say-the-boundary-once-in-the-executor-prompt.md`
 
 ## Execution Notes
 
