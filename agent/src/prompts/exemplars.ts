@@ -231,13 +231,6 @@ function importSpecifier(relPath: string, alias: AliasRule | null): string {
   return withoutExtension;
 }
 
-interface ParsedAlias {
-  alias: AliasRule | null;
-  strictFlags: string[];
-  sources: string[];
-  warnings: string[];
-}
-
 /**
  * Strictness switches are read, never named: a boolean `true` on an option whose name is `strict`
  * or `no` + a capital is the compiler telling us it is enforcing something.
@@ -249,7 +242,7 @@ interface ParsedAlias {
 const STRICTNESS_OPTION = /^(?:strict|no[A-Z])/;
 const NON_DIAGNOSTIC_OPTIONS = new Set(["noEmit"]);
 
-function parseTsConfig(options: Record<string, unknown>): Pick<ParsedAlias, "alias" | "strictFlags"> {
+function parseTsConfig(options: Record<string, unknown>): { alias: AliasRule | null; strictFlags: string[] } {
   const paths = stringMap(options["paths"]);
   let alias: AliasRule | null = null;
   for (const [pattern, targets] of Object.entries(paths)) {
