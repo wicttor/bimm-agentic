@@ -87,3 +87,16 @@
 - **Carry-forward:** T06 consumes `execution_failed` details; T10 wires `executeTool`+`toToolMessage` into the loop
 - **Incidents:** (1) entry tree carried a parallel T04-review session's uncommitted edits — surfaced to the user, committed as `db488c3`+`3b5ff83` before Triage, no silent carry; (2) none during execution
 - **Work Report:** docs/plans/.work/.review/2026-09-05-002-review.md
+
+## Work Report — 2026-09-05-003-review
+
+- **Status:** complete
+- **Work branch:** work/cli-agentic-code-generator
+- **Tasks:** 1/1 completed, 0 for-review, 0 blocked, 0 skipped (scope: `2026-09-04-001-T06` only)
+- **Gate decision:** Gate passed — clean regression check; no un-sanctioned scope findings (the one out-of-list change, the T04 `vite-env.d.ts` fix, was surfaced and user-approved before any production code was written)
+- **Regression check:** clean (app 2/2 · agent 103/103 · both typechecks exit 0; +27 tests, zero new failures vs green baseline)
+- **Test strength:** 27 AC tests, 3 real-process probes (untouched scaffold clean via real `tsc`+`vitest`; strict-flag fixture → `TS6133`/`TS2322`/`TS6133` at exact lines; genuinely failing `vitest` run mapped to file+line); anti-false-green quartet asserted (missing deps, unparseable report, zero tests collected, non-zero exit with nothing parsed); sandbox proven live by an `allowedScripts: ["build"]` case that reaches the runner zero times; Red assertion-level (22/26)
+- **Scope creep:** 1 approved finding — `agent/src/scaffold.ts` + `agent/tests/scaffold.test.ts` (T04 upstream: `vite-env.d.ts` joins the app subset, `fileCount` 9→10). T06 itself stayed inside `files.create` 3 + `files.test` 1; `package.json`, `agent/src/index.ts`, `agent/src/tools/*` untouched
+- **Learnings to capture:** 5 (run `/learn` to persist; closes `machine-readable-validation-output`, opens `real-process-tests-in-ci`)
+- **Carry-forward:** T11 consumes `ValidationResult.errors` (project-relative `file` + `code`) and must treat `error !== null` as "not measured" rather than "clean"; T13's e2e depends on `defaultRunScript`'s machine-readable flags
+- **Work Report:** docs/plans/.work/.review/2026-09-05-003-review.md
