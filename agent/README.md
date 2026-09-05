@@ -5,6 +5,7 @@ This is the core agent implementation for spec-driven code generation. It transf
 ## Overview
 
 The agent implements a **two-loop architecture**:
+
 - **Inner loop**: Generates code file-by-file with tool-use retry for localized failures
 - **Outer loop**: Validates and repairs full-app failures (typecheck/test)
 
@@ -71,6 +72,7 @@ export OPENAI_API_KEY=sk-...
 ```
 
 Alternatively, copy `.env.example` and fill in one key:
+
 ```bash
 cp .env.example .env
 # Edit .env with your API key
@@ -86,7 +88,7 @@ npx ts-node agent/src/index.ts --spec specs/car-inventory.md --out generated-app
 npx ts-node agent/src/index.ts --spec docs/examples/variant-specs/variant-rename.md --out generated-book
 
 # With specific provider override
-npx ts-node agent/src/index.ts --spec specs/car-inventory.md --provider openai --model gpt-4o
+npx ts-node agent/src/index.ts --spec specs/car-inventory.md --provider openai --model gpt-5-nano
 ```
 
 ### 4. Verify Output
@@ -101,16 +103,16 @@ npm run dev  # Run dev server at localhost:5173
 
 ## CLI Flags
 
-| Flag | Required | Default | Description |
-|------|----------|---------|-------------|
-| `--spec` | Yes | — | Path to spec file (relative or absolute) |
-| `--out` | No | `generated-app` | Output directory for generated app |
-| `--provider` | No | Auto-detect | `anthropic` or `openai` |
-| `--model` | No | `claude-sonnet-4-5` (Claude) or `gpt-4o` (GPT) | LLM model ID |
-| `--max-retries` | No | `3` | Outer repair-loop retry count |
-| `--max-iterations` | No | `8` | Inner tool-loop retry count per task |
-| `--dry-run` | No | `false` | Resolve config only; no API calls |
-| `--skills-dir` | No | `agent/skills` | Path to skill modules for injection |
+| Flag               | Required | Default                                            | Description                              |
+| ------------------ | -------- | -------------------------------------------------- | ---------------------------------------- |
+| `--spec`           | Yes      | —                                                  | Path to spec file (relative or absolute) |
+| `--out`            | No       | `generated-app`                                    | Output directory for generated app       |
+| `--provider`       | No       | Auto-detect                                        | `anthropic` or `openai`                  |
+| `--model`          | No       | `claude-sonnet-4-5` (Claude) or `gpt-5-nano` (GPT) | LLM model ID                             |
+| `--max-retries`    | No       | `3`                                                | Outer repair-loop retry count            |
+| `--max-iterations` | No       | `8`                                                | Inner tool-loop retry count per task     |
+| `--dry-run`        | No       | `false`                                            | Resolve config only; no API calls        |
+| `--skills-dir`     | No       | `agent/skills`                                     | Path to skill modules for injection      |
 
 ## Configuration
 
@@ -120,6 +122,7 @@ Environment variables (required exactly one):
 - **`OPENAI_API_KEY`** — OpenAI API key (for GPT models)
 
 Optional:
+
 - **`LLM_PROVIDER`** — Override auto-detection: `anthropic` or `openai`
 
 ## Testing
@@ -176,15 +179,15 @@ Outer Repair Loop (max 3 retries)
 
 ### Key Components
 
-| Component | Responsibility |
-|-----------|-----------------|
-| **Planner** | Decompose spec into ordered, dependency-aware tasks |
-| **Generator** | Generate code file-by-file with per-task context |
-| **Repair Loop** | Validate and iterate until typecheck/tests pass |
-| **Validator** | Execute TypeScript checks and unit tests |
-| **Tracer** | Record all LLM calls for debugging/replay |
+| Component           | Responsibility                                                  |
+| ------------------- | --------------------------------------------------------------- |
+| **Planner**         | Decompose spec into ordered, dependency-aware tasks             |
+| **Generator**       | Generate code file-by-file with per-task context                |
+| **Repair Loop**     | Validate and iterate until typecheck/tests pass                 |
+| **Validator**       | Execute TypeScript checks and unit tests                        |
+| **Tracer**          | Record all LLM calls for debugging/replay                       |
 | **Context Builder** | Pack spec + rules + exemplars into prompt; respect token budget |
-| **LLM Adapters** | Wrap provider APIs (Anthropic, OpenAI) with unified interface |
+| **LLM Adapters**    | Wrap provider APIs (Anthropic, OpenAI) with unified interface   |
 
 ## Failure Modes & Mitigation
 
@@ -200,6 +203,7 @@ See [Architecture Doc](../docs/plans/architectures/cli-agentic-architecture.md#3
 ## Cost Analysis
 
 **Typical run (Car Inventory spec):**
+
 - ~5–7 LLM calls (1 plan + 4 generators + 0–2 repairs)
 - ~3500 input tokens, ~12200 output tokens
 - ~$0.08 with Claude Sonnet 4.5 (actual: depends on retries)
@@ -220,6 +224,7 @@ npx ts-node agent/src/index.ts \
 ```
 
 **Expected output:**
+
 - Files: `src/useBooks.ts`, `src/BookList.tsx`, `src/AddBookForm.tsx`
 - Hook: `useBooks()` (not `useCars()`)
 - No "Car" references in generated code
@@ -274,13 +279,13 @@ Examine these to debug generation issues without re-running LLM calls.
 
 ## Tradeoffs & Design Decisions
 
-| Decision | Why | Tradeoff |
-|----------|-----|----------|
-| **Custom two-loop** | Full control over retry strategy | More code than using a framework |
-| **Explicit tracer** | Perfect debuggability | Adds disk I/O and storage (~1–10 MB/run) |
-| **Strict TypeScript** | Catches bugs early | Slows generation (full typecheck per task) |
-| **Spec-driven (not code-gen config)** | Easier for non-technical spec authors | Planner must be smart (calls LLM every run) |
-| **Rejected pi-SDK** | Need full visibility into loop logic | More code than using a higher-level framework |
+| Decision                              | Why                                   | Tradeoff                                      |
+| ------------------------------------- | ------------------------------------- | --------------------------------------------- |
+| **Custom two-loop**                   | Full control over retry strategy      | More code than using a framework              |
+| **Explicit tracer**                   | Perfect debuggability                 | Adds disk I/O and storage (~1–10 MB/run)      |
+| **Strict TypeScript**                 | Catches bugs early                    | Slows generation (full typecheck per task)    |
+| **Spec-driven (not code-gen config)** | Easier for non-technical spec authors | Planner must be smart (calls LLM every run)   |
+| **Rejected pi-SDK**                   | Need full visibility into loop logic  | More code than using a higher-level framework |
 
 See [Architecture Doc](../docs/plans/architectures/cli-agentic-architecture.md#6-tradeoffs) for full discussion.
 

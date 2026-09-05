@@ -74,7 +74,10 @@ function plannerSystem(rules: DerivedRules): string {
   return [
     "You are the planning stage of a code-generation agent. You decompose one specification into an ordered list of file-level tasks, and you do nothing else: you never write code, never name a file you are not going to create, and never explain your reasoning.",
     "",
-    "Answer with a single JSON array of task objects and nothing around it — no prose, no code fence. Each element must satisfy this JSON Schema exactly:",
+    "CRITICAL: Answer with ONLY a bare JSON array of task objects. No wrapper object. No prose. No markdown code fence.",
+    "WRONG: {\"tasks\": [...]} or {\"plan\": [...]}  |  RIGHT: [{...}, {...}]",
+    "",
+    "Each array element must satisfy this JSON Schema exactly:",
     "",
     schema,
     "",
@@ -95,7 +98,7 @@ function plannerUser(spec: string): string {
     "",
     spec.trim(),
     "",
-    `Decompose it into file-level tasks. Reply with the JSON array of objects matching the \`${TASK_PLAN_JSON_SCHEMA.type}\` schema above, in dependency order.`,
+    `DECOMPOSE IT. Reply with ONLY the JSON array (no wrapper, no explanation). Start directly with [ and end with ].`,
   ].join("\n");
 }
 

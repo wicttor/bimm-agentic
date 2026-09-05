@@ -31,7 +31,7 @@ const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 
 /** Anthropic rejects requests without `max_tokens`; the loop overrides it per call. */
-const ANTHROPIC_DEFAULT_MAX_TOKENS = 8_000;
+const ANTHROPIC_DEFAULT_max_tokens = 8_000;
 
 // ---------------------------------------------------------------------------
 // Internal -> wire
@@ -47,13 +47,21 @@ function toAnthropicTools(tools: ToolDefinition[] | undefined): WireJson[] {
   }));
 }
 
-function toAnthropicAssistantBlocks(message: { text?: string; toolCalls?: ToolCall[] }): WireJson[] {
+function toAnthropicAssistantBlocks(message: {
+  text?: string;
+  toolCalls?: ToolCall[];
+}): WireJson[] {
   const blocks: WireJson[] = [];
   if (message.text !== undefined && message.text.length > 0) {
     blocks.push({ type: "text", text: message.text });
   }
   for (const call of message.toolCalls ?? []) {
-    blocks.push({ type: "tool_use", id: call.id, name: call.name, input: call.args });
+    blocks.push({
+      type: "tool_use",
+      id: call.id,
+      name: call.name,
+      input: call.args,
+    });
   }
   return blocks;
 }
@@ -67,10 +75,16 @@ function toAnthropicMessages(messages: Message[]): WireJson[] {
   for (const message of messages) {
     switch (message.role) {
       case "user":
-        out.push({ role: "user", content: [{ type: "text", text: message.text }] });
+        out.push({
+          role: "user",
+          content: [{ type: "text", text: message.text }],
+        });
         break;
       case "assistant":
-        out.push({ role: "assistant", content: toAnthropicAssistantBlocks(message) });
+        out.push({
+          role: "assistant",
+          content: toAnthropicAssistantBlocks(message),
+        });
         break;
       case "tool":
         out.push({
@@ -96,13 +110,14 @@ function toAnthropicRequestBody(
 ): WireJson {
   const body: WireJson = {
     model,
-    max_tokens: request.maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
+    max_tokens: request.maxTokens ?? ANTHROPIC_DEFAULT_max_tokens,
     messages: toAnthropicMessages(request.messages),
   };
   if (request.system !== undefined) body["system"] = request.system;
   const tools = toAnthropicTools(request.tools);
   if (tools.length > 0) body["tools"] = tools;
-  if (request.temperature !== undefined) body["temperature"] = request.temperature;
+  if (request.temperature !== undefined)
+    body["temperature"] = request.temperature;
   return body;
 }
 
@@ -110,7 +125,10 @@ function toAnthropicRequestBody(
 // Wire -> internal
 // ---------------------------------------------------------------------------
 
-function fromAnthropicStopReason(reason: unknown, hasToolCalls: boolean): StopReason {
+function fromAnthropicStopReason(
+  reason: unknown,
+  hasToolCalls: boolean,
+): StopReason {
   switch (asJsonString(reason)) {
     case "max_tokens":
       return "max_tokens";
@@ -141,13 +159,18 @@ function fromAnthropicUsage(payload: WireJson): Usage {
 function fromAnthropicToolCall(block: WireJson, index: number): ToolCall {
   const name = asJsonString(block["name"]);
   if (name.length === 0) {
-    throw new LlmError("invalid_response", "anthropic: tool_use block has no name", {
-      details: { provider: "anthropic", block: index },
-    });
+    throw new LlmError(
+      "invalid_response",
+      "anthropic: tool_use block has no name",
+      {
+        details: { provider: "anthropic", block: index },
+      },
+    );
   }
   const rawId = block["id"];
   return {
-    id: typeof rawId === "string" && rawId.length > 0 ? rawId : `toolu_${index}`,
+    id:
+      typeof rawId === "string" && rawId.length > 0 ? rawId : `toolu_${index}`,
     name,
     args: parseToolArguments(block["input"], name, "anthropic"),
   };
@@ -171,7 +194,10 @@ function fromAnthropicResponse(payload: WireJson): Completion {
     ...(text.length > 0 ? { text } : {}),
     toolCalls,
     usage: fromAnthropicUsage(payload),
-    stopReason: fromAnthropicStopReason(payload["stop_reason"], toolCalls.length > 0),
+    stopReason: fromAnthropicStopReason(
+      payload["stop_reason"],
+      toolCalls.length > 0,
+    ),
   };
 }
 

@@ -4,7 +4,11 @@
 // typed `AgentConfig`, or a specific error — so the CLI can fail loudly **before** any
 // network call when configuration is missing or invalid.
 
-export const SUPPORTED_PROVIDERS = ["anthropic", "openai"] as const;
+export const SUPPORTED_PROVIDERS = [
+  "anthropic",
+  "openai",
+  "openrouter",
+] as const;
 
 export type ProviderName = (typeof SUPPORTED_PROVIDERS)[number];
 
@@ -27,7 +31,9 @@ export interface AgentConfig {
   skillsDir: string;
 }
 
-export type ConfigResult = { ok: true; config: AgentConfig } | { ok: false; error: string };
+export type ConfigResult =
+  | { ok: true; config: AgentConfig }
+  | { ok: false; error: string };
 
 /** Documented defaults — referenced by the AC test. */
 export const DEFAULTS = {
@@ -40,13 +46,15 @@ export const DEFAULTS = {
 /** Default model per provider (overridable with `--model`). */
 export const DEFAULT_MODEL: Record<ProviderName, string> = {
   anthropic: "claude-sonnet-4-5",
-  openai: "gpt-4o",
+  openai: "gpt-5-nano",
+  openrouter: "z-ai/glm-5.3-flash",
 };
 
 /** The exact env var each provider needs. */
 export const API_KEY_ENV: Record<ProviderName, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
 };
 
 const FLAG_NAMES = [
@@ -106,7 +114,9 @@ function parseIntegerFlag(
   const text = String(raw);
   const value = Number(text);
   if (!Number.isInteger(value) || value < min) {
-    throw new ConfigError(`${flag} must be an integer >= ${min}, got "${text}".`);
+    throw new ConfigError(
+      `${flag} must be an integer >= ${min}, got "${text}".`,
+    );
   }
   return value;
 }
@@ -125,9 +135,10 @@ function resolveProvider(
     }
     return { provider: name as ProviderName };
   }
-  // Auto-detect from whichever API key is present (Anthropic first).
+  // Auto-detect from whichever API key is present (Anthropic, then OpenAI, then OpenRouter).
   if (env["ANTHROPIC_API_KEY"]) return { provider: "anthropic" };
   if (env["OPENAI_API_KEY"]) return { provider: "openai" };
+  if (env["OPENROUTER_API_KEY"]) return { provider: "openrouter" };
   // No key anywhere: default so the error below can name the exact missing variable.
   return { provider: "anthropic" };
 }
@@ -136,7 +147,10 @@ function resolveProvider(
  * Turn argv + env into a typed `AgentConfig`, or a specific error naming what is wrong
  * (the exact flag, or the exact missing env variable). Never performs I/O.
  */
-export function resolveConfig(argv: string[], env: Env = process.env): ConfigResult {
+export function resolveConfig(
+  argv: string[],
+  env: Env = process.env,
+): ConfigResult {
   let flags: Map<string, string | true>;
   try {
     flags = parseFlags(argv);
@@ -147,14 +161,26 @@ export function resolveConfig(argv: string[], env: Env = process.env): ConfigRes
 
   const spec = flags.get("--spec");
   if (typeof spec !== "string" || spec.length === 0) {
-    return fail('Missing required flag --spec <path> (natural-language spec file, e.g. --spec specs/car-inventory.md).');
+    return fail(
+      "Missing required flag --spec <path> (natural-language spec file, e.g. --spec specs/car-inventory.md).",
+    );
   }
 
   let maxRetries: number;
   let maxIterations: number;
   try {
-    maxRetries = parseIntegerFlag(flags, "--max-retries", DEFAULTS.maxRetries, 0);
-    maxIterations = parseIntegerFlag(flags, "--max-iterations", DEFAULTS.maxIterations, 1);
+    maxRetries = parseIntegerFlag(
+      flags,
+      "--max-retries",
+      DEFAULTS.maxRetries,
+      0,
+    );
+    maxIterations = parseIntegerFlag(
+      flags,
+      "--max-iterations",
+      DEFAULTS.maxIterations,
+      1,
+    );
   } catch (err) {
     if (err instanceof ConfigError) return fail(err.message);
     throw err;
@@ -180,7 +206,8 @@ export function resolveConfig(argv: string[], env: Env = process.env): ConfigRes
       : DEFAULT_MODEL[provider.provider];
 
   const outRaw = flags.get("--out");
-  const out = typeof outRaw === "string" && outRaw.length > 0 ? outRaw : DEFAULTS.out;
+  const out =
+    typeof outRaw === "string" && outRaw.length > 0 ? outRaw : DEFAULTS.out;
 
   const skillsDirRaw = flags.get("--skills-dir");
   const skillsDir =

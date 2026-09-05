@@ -14,6 +14,7 @@ import { resolveConfig, type AgentConfig } from "./config.ts";
 import { handleTraceCommand } from "./trace-cli.ts";
 import { AnthropicProvider } from "./llm/anthropic.ts";
 import { OpenAIProvider } from "./llm/openai.ts";
+import { OpenRouterProvider } from "./llm/openrouter.ts";
 import { FakeProvider } from "./llm/fake.ts";
 import type { LlmProvider } from "./llm/provider.ts";
 import { scaffold } from "./scaffold.ts";
@@ -58,12 +59,17 @@ function createDefaultProvider(config: AgentConfig, env: Record<string, string |
     if (key) {
       return new OpenAIProvider({ model: config.model, apiKey: key });
     }
+  } else if (config.provider === "openrouter") {
+    const key = env["OPENROUTER_API_KEY"];
+    if (key) {
+      return new OpenRouterProvider({ model: config.model, apiKey: key });
+    }
   }
   // Fall back to FakeProvider for development/testing
   return new FakeProvider({
     responses: [
       {
-        text: "Using FakeProvider for development. Set ANTHROPIC_API_KEY or OPENAI_API_KEY for real runs.",
+        text: "Using FakeProvider for development. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY for real runs.",
         toolCalls: [],
       },
     ],

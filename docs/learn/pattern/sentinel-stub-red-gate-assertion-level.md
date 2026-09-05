@@ -15,7 +15,12 @@ source:
   extracted_at: 2026-09-04T20:20:00-04:00
 confidence: high
 summary: Satisfy a Red gate that demands an assertion failure (not an import/setup error) by creating modules as type-correct stubs that return an empty, well-shaped result, so the new test runs and fails on the acceptance-criterion assertions themselves.
-related: [loose-casts-in-agent-tests-break-typecheck-wiring, test-config-isolation-behaviorally-not-regex, provider-agnostic-function-calling-five-wire-divergences]
+related:
+  [
+    loose-casts-in-agent-tests-break-typecheck-wiring,
+    test-config-isolation-behaviorally-not-regex,
+    provider-agnostic-function-calling-five-wire-divergences,
+  ]
 ---
 
 # Sentinel Stubs Keep the Red Gate at Assertion Level
@@ -24,7 +29,7 @@ related: [loose-casts-in-agent-tests-break-typecheck-wiring, test-config-isolati
 
 A test-first gate that requires "the new test fails for the right reason — an assertion fires, **not**
 a setup/import/compile error" is hard to satisfy literally on a task whose modules do not exist yet.
-The obvious Red — write the test, run it, watch it fail — fails at *collection*
+The obvious Red — write the test, run it, watch it fail — fails at _collection_
 (`Cannot find module '../src/llm/anthropic.ts'`, `Tests: no tests`), which proves only that files are
 missing. Two other tempting Reds are equally weak: a stub that throws
 `NotImplementedError` makes the test die at the call site rather than on an assertion, and a stub
@@ -38,7 +43,7 @@ implementation compiles, but every behavior returns an **empty, well-shaped resu
 - Export the real interface and types so the test file itself typechecks.
 - Give each class its final constructor signature and declare it `implements` the shared interface,
   so interface drift is caught by the compiler during Red, not discovered at Green.
-- Make the unimplemented method resolve to the *empty member of the result type* — e.g. an empty
+- Make the unimplemented method resolve to the _empty member of the result type_ — e.g. an empty
   collection plus zero-filled counters and the neutral terminal value — never throw, never return
   `undefined`.
 
@@ -49,8 +54,8 @@ AC scenario, all visibly unimplemented.
 
 Run the import-level failure **first and separately**, purely as evidence that nothing was
 pre-implemented, then record in the log that it was not the gate's payload. Three distinct Red
-signals, three distinct meanings: *files missing* (setup) → *behavior absent* (assertions) →
-*behavior present* (Green).
+signals, three distinct meanings: _files missing_ (setup) → _behavior absent_ (assertions) →
+_behavior present_ (Green).
 
 ## When to Apply
 
@@ -75,7 +80,7 @@ about which AC clause any test checks.
 
 ## Related Learnings
 
-- `loose-casts-in-agent-tests-break-typecheck-wiring` — the reason the stubs must be *type-correct*:
+- `loose-casts-in-agent-tests-break-typecheck-wiring` — the reason the stubs must be _type-correct_:
   the test file is typechecked, so a Red that only "runs under vitest" can still break a sibling
   suite.
 - `test-config-isolation-behaviorally-not-regex` — same discipline, different object: assert observed

@@ -1,10 +1,9 @@
-// OpenAI Chat Completions adapter (task 2026-09-04-001-T03).
+// OpenRouter adapter (task 2026-09-04-001-T03).
 //
-// Translates the same internal vocabulary to and from OpenAI's wire format using global `fetch` —
-// no SDK dependency. Everything provider-specific is confined to this file: the system prompt is a
-// leading `role: "system"` message, tool schemas nest under `tools[].function.parameters`, tool
-// calls arrive on `choices[].message.tool_calls` with **stringified** arguments, and token counts
-// arrive as `prompt_tokens` / `completion_tokens`.
+// OpenRouter is an API-compatible wrapper around multiple model providers.
+// It uses the same Chat Completions API as OpenAI with a different endpoint and requires
+// an HTTP-Referer header. This adapter is a thin wrapper around the OpenAI format with
+// OpenRouter-specific headers.
 
 import {
   asJsonObjectArray,
@@ -27,21 +26,20 @@ import {
   type Usage,
 } from "./provider.ts";
 
-/** OpenAI Chat Completions API. */
-const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
+/** OpenRouter Chat Completions API (OpenAI-compatible). */
+const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 /** Fallback completion cap when the caller does not specify one. */
-const OPENAI_DEFAULT_max_tokens = 8_000;
+const OPENROUTER_DEFAULT_max_tokens = 8_000;
 
 // ---------------------------------------------------------------------------
 // Internal -> wire
 // ---------------------------------------------------------------------------
 
-function toOpenAITools(tools: ToolDefinition[] | undefined): WireJson[] {
+function toOpenRouterTools(tools: ToolDefinition[] | undefined): WireJson[] {
   if (tools === undefined || tools.length === 0) return [];
   return tools.map((tool) => ({
     type: "function",
-    // OpenAI's field name for the JSON Schema is `parameters`, nested under `function`.
     function: {
       name: tool.name,
       description: tool.description,
@@ -50,7 +48,7 @@ function toOpenAITools(tools: ToolDefinition[] | undefined): WireJson[] {
   }));
 }
 
-function toOpenAIMessage(message: Message): WireJson {
+function toOpenRouterMessage(message: Message): WireJson {
   switch (message.role) {
     case "user":
       return { role: "user", content: message.text };
@@ -80,38 +78,32 @@ function toOpenAIMessage(message: Message): WireJson {
   }
 }
 
-/** OpenAI has no top-level system field, so the system prompt becomes the first message. */
-function toOpenAIMessages(
+/** OpenRouter has no top-level system field, so the system prompt becomes the first message. */
+function toOpenRouterMessages(
   system: string | undefined,
   messages: Message[],
 ): WireJson[] {
   const out: WireJson[] = [];
   if (system !== undefined) out.push({ role: "system", content: system });
-  for (const message of messages) out.push(toOpenAIMessage(message));
+  for (const message of messages) out.push(toOpenRouterMessage(message));
   return out;
 }
 
-function toOpenAIRequestBody(
+function toOpenRouterRequestBody(
   request: CompleteRequest,
   model: string,
 ): WireJson {
   const body: WireJson = {
     model,
-    messages: toOpenAIMessages(request.system, request.messages),
+    messages: toOpenRouterMessages(request.system, request.messages),
   };
 
-  // GPT-5 models use 'max_completion_tokens', while earlier models use 'max_tokens'
-  const maxTokensValue = request.maxTokens ?? OPENAI_DEFAULT_max_tokens;
-  if (model.startsWith("gpt-5")) {
-    body["max_completion_tokens"] = maxTokensValue;
-  } else {
-    body["max_tokens"] = maxTokensValue;
-  }
+  const maxTokensValue = request.maxTokens ?? OPENROUTER_DEFAULT_max_tokens;
+  body["max_tokens"] = maxTokensValue;
 
-  const tools = toOpenAITools(request.tools);
+  const tools = toOpenRouterTools(request.tools);
   if (tools.length > 0) {
     body["tools"] = tools;
-    // Let the model choose; the loop's own forcing strategy is T10's concern.
     body["tool_choice"] = "auto";
   }
   if (request.temperature !== undefined)
@@ -123,7 +115,7 @@ function toOpenAIRequestBody(
 // Wire -> internal
 // ---------------------------------------------------------------------------
 
-function fromOpenAIFinishReason(
+function fromOpenRouterFinishReason(
   reason: unknown,
   hasToolCalls: boolean,
 ): StopReason {
@@ -140,68 +132,62 @@ function fromOpenAIFinishReason(
   }
 }
 
-function fromOpenAIUsage(payload: WireJson): Usage {
+function fromOpenRouterUsage(payload: WireJson): Usage {
   const usage = payload["usage"];
   if (!isJsonObject(usage)) return { ...EMPTY_USAGE };
-  const details = usage["prompt_tokens_details"];
   return {
     inputTokens: asJsonNumber(usage["prompt_tokens"]),
     outputTokens: asJsonNumber(usage["completion_tokens"]),
-    // OpenAI reports cached input tokens only on the prompt side; nothing is cache-written.
-    cacheReadTokens: isJsonObject(details)
-      ? asJsonNumber(details["cached_tokens"])
-      : 0,
+    cacheReadTokens: 0,
     cacheWriteTokens: 0,
   };
 }
 
-function fromOpenAIToolCall(call: WireJson, index: number): ToolCall {
+function fromOpenRouterToolCall(call: WireJson, index: number): ToolCall {
   const fn = call["function"];
   const name = isJsonObject(fn) ? asJsonString(fn["name"]) : "";
   if (name.length === 0) {
     throw new LlmError(
       "invalid_response",
-      "openai: tool_call has no function name",
+      "openrouter: tool_call has no function name",
       {
-        details: { provider: "openai", call: index },
+        details: { provider: "openrouter", call: index },
       },
     );
   }
   return {
     id: asJsonString(call["id"], `call_${index}`),
     name,
-    // The wire payload is a JSON string; malformed content becomes a typed adapter error here
-    // rather than an `undefined` read downstream.
     args: parseToolArguments(
       isJsonObject(fn) ? fn["arguments"] : undefined,
       name,
-      "openai",
+      "openrouter",
     ),
   };
 }
 
-function fromOpenAIResponse(payload: WireJson): Completion {
+function fromOpenRouterResponse(payload: WireJson): Completion {
   const choices = asJsonObjectArray(payload["choices"]);
   const choice = choices[0];
   if (choice === undefined) {
     throw new LlmError(
       "invalid_response",
-      "openai: response contained no choices",
+      "openrouter: response contained no choices",
       {
-        details: { provider: "openai", response: payload },
+        details: { provider: "openrouter", response: payload },
       },
     );
   }
   const message = isJsonObject(choice["message"]) ? choice["message"] : {};
   const toolCalls = asJsonObjectArray(message["tool_calls"]).map(
-    fromOpenAIToolCall,
+    fromOpenRouterToolCall,
   );
   const text = asJsonString(message["content"]);
   return {
     ...(text.length > 0 ? { text } : {}),
     toolCalls,
-    usage: fromOpenAIUsage(payload),
-    stopReason: fromOpenAIFinishReason(
+    usage: fromOpenRouterUsage(payload),
+    stopReason: fromOpenRouterFinishReason(
       choice["finish_reason"],
       toolCalls.length > 0,
     ),
@@ -212,8 +198,8 @@ function fromOpenAIResponse(payload: WireJson): Completion {
 // Provider
 // ---------------------------------------------------------------------------
 
-export class OpenAIProvider implements LlmProvider {
-  readonly name = "openai" as const;
+export class OpenRouterProvider implements LlmProvider {
+  readonly name = "openrouter" as const;
   readonly model: string;
 
   private readonly options: ProviderOptions;
@@ -226,17 +212,19 @@ export class OpenAIProvider implements LlmProvider {
   async complete(request: CompleteRequest): Promise<Completion> {
     const payload = await postJson(
       {
-        url: OPENAI_CHAT_URL,
-        provider: "openai",
+        url: OPENROUTER_CHAT_URL,
+        provider: "openrouter",
         headers: {
           authorization: `Bearer ${this.options.apiKey}`,
+          "http-referer": "https://github.com/earendil-works/bimm-agentic",
+          "x-title": "bimm-agentic",
           ...this.options.headers,
         },
-        body: toOpenAIRequestBody(request, this.model),
+        body: toOpenRouterRequestBody(request, this.model),
       },
       this.options,
       request.signal,
     );
-    return fromOpenAIResponse(payload);
+    return fromOpenRouterResponse(payload);
   }
 }

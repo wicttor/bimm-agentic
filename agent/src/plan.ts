@@ -196,7 +196,9 @@ export async function plan(input: PlanInput): Promise<PlanResult> {
   });
 
   // Extract the write_plan tool call
-  let writeplanCall = response.toolCalls.find((call) => call.name === "write_plan");
+  let writeplanCall = response.toolCalls.find(
+    (call) => call.name === "write_plan",
+  );
   let planData = writeplanCall?.args;
 
   // Re-ask loop: if validation fails, send back the error and re-ask once
@@ -218,12 +220,23 @@ export async function plan(input: PlanInput): Promise<PlanResult> {
           toolCalls: response.toolCalls,
         };
         messages.push(errorMessage);
-        messages.push({
-          role: "tool",
-          toolCallId: "validation_error",
-          content: "Expected a write_plan tool call with a JSON array, but got prose text instead. Reply with ONLY a write_plan tool call containing the JSON array.",
-          isError: true,
-        });
+
+        // Only add tool message if there were actual tool calls to respond to
+        if (response.toolCalls && response.toolCalls.length > 0) {
+          messages.push({
+            role: "tool",
+            toolCallId: response.toolCalls[0]?.id || "validation_error",
+            content:
+              "Expected a write_plan tool call with a JSON array, but got prose text instead. Reply with ONLY a write_plan tool call containing the JSON array.",
+            isError: true,
+          });
+        } else {
+          // If there were no tool calls at all, send error as user message instead
+          messages.push({
+            role: "user",
+            text: "Expected a write_plan tool call with a JSON array, but got prose text instead. Reply with ONLY a write_plan tool call containing the JSON array.",
+          });
+        }
 
         response = await provider.complete({
           system,
@@ -232,7 +245,9 @@ export async function plan(input: PlanInput): Promise<PlanResult> {
           maxTokens: 8192,
         });
 
-        writeplanCall = response.toolCalls.find((call) => call.name === "write_plan");
+        writeplanCall = response.toolCalls.find(
+          (call) => call.name === "write_plan",
+        );
         planData = writeplanCall?.args;
         continue;
       }
@@ -253,7 +268,9 @@ export async function plan(input: PlanInput): Promise<PlanResult> {
         // Re-ask with the validation error
         const errorMessage: Message = {
           role: "assistant",
-          toolCalls: [{ id: "write_plan_call", name: "write_plan", args: planData }],
+          toolCalls: [
+            { id: "write_plan_call", name: "write_plan", args: planData },
+          ],
         };
         messages.push(errorMessage);
         messages.push({
@@ -270,7 +287,9 @@ export async function plan(input: PlanInput): Promise<PlanResult> {
           maxTokens: 8192,
         });
 
-        writeplanCall = response.toolCalls.find((call) => call.name === "write_plan");
+        writeplanCall = response.toolCalls.find(
+          (call) => call.name === "write_plan",
+        );
         planData = writeplanCall?.args;
         continue;
       }

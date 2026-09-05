@@ -15,13 +15,18 @@ source:
   extracted_at: 2026-09-04T20:20:00-04:00
 confidence: high
 summary: Anthropic and OpenAI function calling diverge on five axes (system placement, tool-schema key, tool-args type, usage field names, stop vocabulary) and converge on two (retry policy, error classification) — normalize the five per adapter, share the two, and wire drift becomes one red unit test.
-related: [explicit-provider-missing-key-fails-no-fallback, dry-run-zero-network-proven-by-injection-spies, sentinel-stub-red-gate-assertion-level]
+related:
+  [
+    explicit-provider-missing-key-fails-no-fallback,
+    dry-run-zero-network-proven-by-injection-spies,
+    sentinel-stub-red-gate-assertion-level,
+  ]
 ---
 
 # Provider-Agnostic Function Calling: Five Wire Divergences, One Interface
 
 > **Scope of this entry — the plan's `llm-integration` learning gap is only half-closed.** The gap is
-> *"Provider-agnostic function calling + token budgeting"*, to be captured after U2 **and** U8. This
+> _"Provider-agnostic function calling + token budgeting"_, to be captured after U2 **and** U8. This
 > entry records the **adapter/function-calling** half (U2, `agent/src/llm/*`). **Token-budget-driven
 > context trimming (U8, `agent/src/context.ts`) is still owed** — extend this entry when U8 lands;
 > do not treat the gap as closed.
@@ -43,13 +48,13 @@ interface is narrow: `messages + tool definitions in` → `text-or-tool-calls ou
 **The five axes where the providers genuinely diverge** (each needs a normalization rule, and each
 is a separate assertion in the adapter test):
 
-| Axis | Anthropic | OpenAI | Internal normalization |
-| --- | --- | --- | --- |
-| System prompt location | top-level `system` field | first message, `role: "system"` | one `system?: string` on the request; adapters place it |
-| Tool schema key | `tools[].input_schema` | `tools[].function.parameters` | one `parameters` (JSON Schema) on `ToolDefinition` |
-| Tool-argument payload | `input` — an **object** | `function.arguments` — a **JSON string** | `ToolCall.args` always an object; one shared parse path |
-| Usage field names | `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | `prompt_tokens`, `completion_tokens`, `prompt_tokens_details.cached_tokens` | fixed 4-field `Usage`; missing counters default to 0 |
-| Termination vocabulary | `end_turn` / `tool_use` / `max_tokens` | `stop` / `tool_calls` / `length` | `StopReason = stop \| tool_use \| max_tokens` |
+| Axis                   | Anthropic                                                                                 | OpenAI                                                                      | Internal normalization                                  |
+| ---------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| System prompt location | top-level `system` field                                                                  | first message, `role: "system"`                                             | one `system?: string` on the request; adapters place it |
+| Tool schema key        | `tools[].input_schema`                                                                    | `tools[].function.parameters`                                               | one `parameters` (JSON Schema) on `ToolDefinition`      |
+| Tool-argument payload  | `input` — an **object**                                                                   | `function.arguments` — a **JSON string**                                    | `ToolCall.args` always an object; one shared parse path |
+| Usage field names      | `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | `prompt_tokens`, `completion_tokens`, `prompt_tokens_details.cached_tokens` | fixed 4-field `Usage`; missing counters default to 0    |
+| Termination vocabulary | `end_turn` / `tool_use` / `max_tokens`                                                    | `stop` / `tool_calls` / `length`                                            | `StopReason = stop \| tool_use \| max_tokens`           |
 
 Two further divergences worth naming, because they shape the **conversation** rather than one field:
 tool calls ride on typed `content[]` blocks (`tool_use`, and results as a `user`/`tool_result`
@@ -57,7 +62,7 @@ block) versus a flat `choices[].message.tool_calls` array with a dedicated `role
 and authentication is a header (`x-api-key` + explicit `anthropic-version`) versus
 `authorization: Bearer`.
 
-**The two axes where they do *not* diverge** — and therefore must not be re-implemented per
+**The two axes where they do _not_ diverge** — and therefore must not be re-implemented per
 provider:
 
 1. **Retry policy.** Both are plain HTTP: 429 and 5xx are retryable with bounded exponential
@@ -69,7 +74,7 @@ sleep site**, and keep only the five mappings in the adapter files. Retry semant
 drift apart silently.
 
 **Normalize failure shape too, not just success shape.** Malformed tool arguments must surface as a
-typed adapter error at *parse* time (`malformed_arguments`), never as an `undefined` field read two
+typed adapter error at _parse_ time (`malformed_arguments`), never as an `undefined` field read two
 hops downstream in the loop. One parse function serving both wire shapes guarantees the two
 providers fail identically. And note `stopReason` describes how a **successful** call ended —
 failures leave as the typed error, so the terminal-state enum needs no `error` member.
@@ -81,7 +86,7 @@ of the pipeline run with no API key.
 
 ## When to Apply
 
-- Any integration with 2+ services that implement the same *concept* with different JSON shapes
+- Any integration with 2+ services that implement the same _concept_ with different JSON shapes
   (LLM providers, payment gateways, search APIs).
 - Whenever a loop needs provider-neutral **accounting** (tokens, cost) or **termination**
   (why did the model stop?) — these are the fields most likely to be silently absent per provider.
@@ -99,7 +104,7 @@ of the pipeline run with no API key.
   the `LlmProvider` interface, the `LlmError` taxonomy with **derived** `retryable`,
   `parseToolArguments` (one malformed-args path for both shapes), and `postJson` (shared transport +
   bounded backoff, single sleep site).
-- `anthropic.ts` / `openai.ts` — *only* the five mappings; each ~200 LOC, no retry logic.
+- `anthropic.ts` / `openai.ts` — _only_ the five mappings; each ~200 LOC, no retry logic.
 - `fake.ts` — `implements LlmProvider`, zero `fetch`, records every request.
 - `agent/tests/llm-adapters.test.ts` — asserts the **observed request body** against a stubbed
   `fetch`, so each axis is independently pinned. Deleting either provider's `input_schema` vs
@@ -110,7 +115,7 @@ of the pipeline run with no API key.
 
 - `explicit-provider-missing-key-fails-no-fallback` — the upstream config decision: which provider
   this adapter is built for, and the exact-variable failure before any network call.
-- `dry-run-zero-network-proven-by-injection-spies` — how "no network" is *proven*; the fake provider
+- `dry-run-zero-network-proven-by-injection-spies` — how "no network" is _proven_; the fake provider
   is the structural half of that.
 - `sentinel-stub-red-gate-assertion-level` — how the adapter test was driven Red before this
   translation existed.
