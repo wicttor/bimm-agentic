@@ -22,7 +22,7 @@ import { renderRules } from "./exemplars.ts";
  * Kept in sync with `GenerationTask` in `generator.ts` by construction: the generator accepts the
  * plan's own entries, so the four keys below are the only contract between the two calls.
  */
-export const TASK_PLAN_SCHEMA_KEYS = ["file", "purpose", "dependsOn", "exports"] as const;
+const TASK_PLAN_SCHEMA_KEYS = ["file", "purpose", "dependsOn", "exports"] as const;
 
 /** A JSON Schema object, plain data so T08 can validate or re-export it without a dependency. */
 export interface JsonSchemaObject {

@@ -42,22 +42,24 @@ export interface Prompt {
 // ---------------------------------------------------------------------------
 // These are the only path literals in the prompt library, and they describe the *structure* of the
 // boilerplate, not its domain. A variant spec that renames files (T14) renames them here, once.
+// Kept module-private on purpose: the public provenance is `DerivedRules.sources`, and exporting
+// them would advertise an override seam that `DeriveOptions` does not provide.
 
 /** The app's own compiler contract. */
-export const TS_CONFIG_FILE = "tsconfig.json";
+const TS_CONFIG_FILE = "tsconfig.json";
 /** Where the runnable verification scripts are declared. */
-export const PACKAGE_JSON_FILE = "package.json";
+const PACKAGE_JSON_FILE = "package.json";
 /** Shared type declarations. */
-export const TYPES_FILE = "src/types.ts";
+const TYPES_FILE = "src/types.ts";
 /** The GraphQL documents the generated code must reuse. */
-export const OPERATIONS_FILE = "src/graphql/queries.ts";
+const OPERATIONS_FILE = "src/graphql/queries.ts";
 /** The mock data whose image dimensions encode the responsive contract. */
-export const FIXTURE_DATA_FILE = "src/mocks/data.ts";
+const FIXTURE_DATA_FILE = "src/mocks/data.ts";
 /** The MSW resolvers that already exist. */
-export const HANDLER_FILE = "src/mocks/handlers.ts";
+const HANDLER_FILE = "src/mocks/handlers.ts";
 
 /** Directories whose files are quoted to the model as few-shot examples. */
-export const DEFAULT_EXEMPLAR_DIRS = ["src/components", "src/__tests__"] as const;
+const DEFAULT_EXEMPLAR_DIRS = ["src/components", "src/__tests__"] as const;
 
 /** Ceiling on a quoted exemplar file, so one verbose reference cannot crowd out the rules. */
 const MAX_EXEMPLAR_CHARS = 6_000;
@@ -163,8 +165,6 @@ export interface DerivedRules {
 export interface DeriveOptions {
   /** Root of the read-only boilerplate; defaults to this repository's root. */
   referenceRoot?: string;
-  /** Directories quoted as few-shot examples; defaults to the component and test exemplar dirs. */
-  exemplarDirs?: readonly string[];
 }
 
 /** The reference tree is not the boilerplate. Unrecoverable, because every prompt depends on it. */
@@ -441,9 +441,8 @@ export function deriveRules(options: DeriveOptions = {}): DerivedRules {
     warnings.push(`mock handlers: no resolver was found in ${HANDLER_FILE}, so the do-not-redefine rule could not be derived`);
   }
 
-  const exemplarDirs = options.exemplarDirs ?? DEFAULT_EXEMPLAR_DIRS;
   const exemplars: ExemplarFile[] = [];
-  for (const dir of [...exemplarDirs].sort()) {
+  for (const dir of [...DEFAULT_EXEMPLAR_DIRS].sort()) {
     const abs = join(root, dir);
     if (!existsSync(abs)) continue;
     for (const name of readdirSync(abs).sort()) {
@@ -466,7 +465,7 @@ export function deriveRules(options: DeriveOptions = {}): DerivedRules {
   }
   if (exemplars.length === 0) {
     warnings.push(
-      `exemplars: no component or test files were found under ${[...exemplarDirs].sort().join(", ")}, so the generator has no reference implementation to follow`,
+      `exemplars: no component or test files were found under ${[...DEFAULT_EXEMPLAR_DIRS].sort().join(", ")}, so the generator has no reference implementation to follow`,
     );
   }
 
@@ -599,7 +598,7 @@ export function renderRules(rules: DerivedRules): string {
 }
 
 /** True for the file names this agent treats as tests. */
-export function isTestPath(filePath: string): boolean {
+function isTestPath(filePath: string): boolean {
   return /\.test\.tsx?$/.test(filePath) || filePath.includes("__tests__");
 }
 

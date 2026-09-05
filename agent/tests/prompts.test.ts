@@ -415,6 +415,23 @@ describe("deriveRules — reads the contract out of the reference files", () => 
     expect(exemplars[1]?.contents).toBe(REFERENCE_COMPONENT_EXEMPLAR);
   });
 
+  it("derives tiers from whatever slot names the fixture happens to use", () => {
+    // The generalization claim (T14): nothing in the derivation knows the words for the responsive
+    // slots, so a boilerplate that names them differently still gets a correct table.
+    const rules = fixtureRules({
+      "src/mocks/data.ts":
+        "export const seedRows = [\n  {\n    thumb: \"https://cdn.example.com/320x240?x=a\",\n    hero: \"https://cdn.example.com/1200x600?x=b\",\n  },\n];\n",
+    });
+    expect(rules.breakpoints?.tiers.map((tier) => tier.field)).toEqual(["thumb", "hero"]);
+    const line = ruleLine(
+      buildGeneratorPrompt({ task: CARD_TASK, spec: "SPEC TEXT", rules }),
+      RULE.breakpoints,
+    );
+    expect(line).toContain("<= 320px");
+    expect(line).toContain(">= 321px");
+    expect(line).not.toContain("640");
+  });
+
   it("records which files it read, so a run trace can show provenance", () => {
     expect(fixtureRules().sources).toEqual([
       "tsconfig.json",
@@ -912,10 +929,16 @@ describe("the repository's own boilerplate", () => {
       "1023",
       "1024",
     ];
+    // Slot names too: the breakpoint tiers are discovered from the fixture, so a prompt module that
+    // knew the words would be a prompt module that could not follow a variant spec (T14).
+    const slotNames = ["mobile", "tablet", "desktop"];
     for (const file of moduleFiles) {
       const source = readFileSync(join(repoRoot, file), "utf8");
       for (const payload of payloads) {
         expect(source.includes(payload), `${file} leaks the rule payload ${payload}`).toBe(false);
+      }
+      for (const slot of slotNames) {
+        expect(source.includes(slot), `${file} names the responsive slot ${slot}`).toBe(false);
       }
       expect(source).not.toMatch(/\bCar\b/);
     }
