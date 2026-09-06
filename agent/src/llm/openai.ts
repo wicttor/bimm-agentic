@@ -31,7 +31,7 @@ import {
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 
 /** Fallback completion cap when the caller does not specify one. */
-const OPENAI_DEFAULT_MAX_TOKENS = 8_000;
+const OPENAI_DEFAULT_max_tokens = 8_000;
 
 // ---------------------------------------------------------------------------
 // Internal -> wire
@@ -63,37 +63,59 @@ function toOpenAIMessage(message: Message): WireJson {
               tool_calls: message.toolCalls.map((call) => ({
                 id: call.id,
                 type: "function",
-                function: { name: call.name, arguments: JSON.stringify(call.args) },
+                function: {
+                  name: call.name,
+                  arguments: JSON.stringify(call.args),
+                },
               })),
             }
           : {}),
       };
     case "tool":
-      return { role: "tool", tool_call_id: message.toolCallId, content: message.content };
+      return {
+        role: "tool",
+        tool_call_id: message.toolCallId,
+        content: message.content,
+      };
   }
 }
 
 /** OpenAI has no top-level system field, so the system prompt becomes the first message. */
-function toOpenAIMessages(system: string | undefined, messages: Message[]): WireJson[] {
+function toOpenAIMessages(
+  system: string | undefined,
+  messages: Message[],
+): WireJson[] {
   const out: WireJson[] = [];
   if (system !== undefined) out.push({ role: "system", content: system });
   for (const message of messages) out.push(toOpenAIMessage(message));
   return out;
 }
 
-function toOpenAIRequestBody(request: CompleteRequest, model: string): WireJson {
+function toOpenAIRequestBody(
+  request: CompleteRequest,
+  model: string,
+): WireJson {
   const body: WireJson = {
     model,
-    max_tokens: request.maxTokens ?? OPENAI_DEFAULT_MAX_TOKENS,
     messages: toOpenAIMessages(request.system, request.messages),
   };
+
+  // GPT-5 models use 'max_completion_tokens', while earlier models use 'max_tokens'
+  const maxTokensValue = request.maxTokens ?? OPENAI_DEFAULT_max_tokens;
+  if (model.startsWith("gpt-5")) {
+    body["max_completion_tokens"] = maxTokensValue;
+  } else {
+    body["max_tokens"] = maxTokensValue;
+  }
+
   const tools = toOpenAITools(request.tools);
   if (tools.length > 0) {
     body["tools"] = tools;
     // Let the model choose; the loop's own forcing strategy is T10's concern.
     body["tool_choice"] = "auto";
   }
-  if (request.temperature !== undefined) body["temperature"] = request.temperature;
+  if (request.temperature !== undefined)
+    body["temperature"] = request.temperature;
   return body;
 }
 
@@ -101,7 +123,10 @@ function toOpenAIRequestBody(request: CompleteRequest, model: string): WireJson 
 // Wire -> internal
 // ---------------------------------------------------------------------------
 
-function fromOpenAIFinishReason(reason: unknown, hasToolCalls: boolean): StopReason {
+function fromOpenAIFinishReason(
+  reason: unknown,
+  hasToolCalls: boolean,
+): StopReason {
   switch (asJsonString(reason)) {
     case "length":
       return "max_tokens";
@@ -123,7 +148,9 @@ function fromOpenAIUsage(payload: WireJson): Usage {
     inputTokens: asJsonNumber(usage["prompt_tokens"]),
     outputTokens: asJsonNumber(usage["completion_tokens"]),
     // OpenAI reports cached input tokens only on the prompt side; nothing is cache-written.
-    cacheReadTokens: isJsonObject(details) ? asJsonNumber(details["cached_tokens"]) : 0,
+    cacheReadTokens: isJsonObject(details)
+      ? asJsonNumber(details["cached_tokens"])
+      : 0,
     cacheWriteTokens: 0,
   };
 }
@@ -132,16 +159,24 @@ function fromOpenAIToolCall(call: WireJson, index: number): ToolCall {
   const fn = call["function"];
   const name = isJsonObject(fn) ? asJsonString(fn["name"]) : "";
   if (name.length === 0) {
-    throw new LlmError("invalid_response", "openai: tool_call has no function name", {
-      details: { provider: "openai", call: index },
-    });
+    throw new LlmError(
+      "invalid_response",
+      "openai: tool_call has no function name",
+      {
+        details: { provider: "openai", call: index },
+      },
+    );
   }
   return {
     id: asJsonString(call["id"], `call_${index}`),
     name,
     // The wire payload is a JSON string; malformed content becomes a typed adapter error here
     // rather than an `undefined` read downstream.
-    args: parseToolArguments(isJsonObject(fn) ? fn["arguments"] : undefined, name, "openai"),
+    args: parseToolArguments(
+      isJsonObject(fn) ? fn["arguments"] : undefined,
+      name,
+      "openai",
+    ),
   };
 }
 
@@ -149,18 +184,27 @@ function fromOpenAIResponse(payload: WireJson): Completion {
   const choices = asJsonObjectArray(payload["choices"]);
   const choice = choices[0];
   if (choice === undefined) {
-    throw new LlmError("invalid_response", "openai: response contained no choices", {
-      details: { provider: "openai", response: payload },
-    });
+    throw new LlmError(
+      "invalid_response",
+      "openai: response contained no choices",
+      {
+        details: { provider: "openai", response: payload },
+      },
+    );
   }
   const message = isJsonObject(choice["message"]) ? choice["message"] : {};
-  const toolCalls = asJsonObjectArray(message["tool_calls"]).map(fromOpenAIToolCall);
+  const toolCalls = asJsonObjectArray(message["tool_calls"]).map(
+    fromOpenAIToolCall,
+  );
   const text = asJsonString(message["content"]);
   return {
     ...(text.length > 0 ? { text } : {}),
     toolCalls,
     usage: fromOpenAIUsage(payload),
-    stopReason: fromOpenAIFinishReason(choice["finish_reason"], toolCalls.length > 0),
+    stopReason: fromOpenAIFinishReason(
+      choice["finish_reason"],
+      toolCalls.length > 0,
+    ),
   };
 }
 

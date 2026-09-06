@@ -4,7 +4,7 @@ title: "Sandboxed tool registry"
 plan-id: 2026-09-04-001
 unit: U4
 tier: deep
-status: not-started
+status: completed
 priority: P0
 dependencies: [2026-09-04-001-T03]
 files:
@@ -40,7 +40,7 @@ Let the model act on the workspace only through validated, allow-listed tools wh
 - Oversized write above the per-file byte cap -> rejected with reason
 
 ## Acceptance Criteria
-- [ ] read_file, write_file, list_files confined to output dir and run_command accepts only allow-listed npm scripts, with rejections returned as structured tool_result errors
+- [x] read_file, write_file, list_files confined to output dir and run_command accepts only allow-listed npm scripts, with rejections returned as structured tool_result errors
 
 ## Dependencies
 - 2026-09-04-001-T03: LLM adapter must define the tool-call/tool-result types that the registry consumes and produces

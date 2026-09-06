@@ -1,0 +1,9 @@
+{
+  "runId": "variant-run-2026-09-05",
+  "timestamp": "2026-09-05T04:51:57.978Z",
+  "spec": "docs/examples/variant-specs/variant-rename.md",
+  "provider": "fake",
+  "taskCount": 4,
+  "successCount": 4,
+  "failureCount": 0
+}

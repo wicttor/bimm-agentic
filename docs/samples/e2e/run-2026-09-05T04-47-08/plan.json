@@ -1,0 +1,41 @@
+[
+  {
+    "file": "src/hooks/useCars.ts",
+    "purpose": "Custom hook for fetching and managing car data with Apollo Client",
+    "dependsOn": [],
+    "exports": [
+      "useCars"
+    ]
+  },
+  {
+    "file": "src/components/CarCard.tsx",
+    "purpose": "MUI Card component displaying individual car with responsive images",
+    "dependsOn": [
+      "src/hooks/useCars.ts"
+    ],
+    "exports": [
+      "CarCard"
+    ]
+  },
+  {
+    "file": "src/components/CarList.tsx",
+    "purpose": "Car list component with search, sort, and add-car form",
+    "dependsOn": [
+      "src/hooks/useCars.ts",
+      "src/components/CarCard.tsx"
+    ],
+    "exports": [
+      "CarList"
+    ]
+  },
+  {
+    "file": "src/App.tsx",
+    "purpose": "Main app component combining all features",
+    "dependsOn": [
+      "src/components/CarList.tsx"
+    ],
+    "exports": [
+      "App"
+    ]
+  }
+]

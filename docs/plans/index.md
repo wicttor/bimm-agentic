@@ -17,6 +17,8 @@ This is the index of planning documents for the project. It serves as a central 
 | Plan ID | Title | tier | tier_recommended | complexity | risk | status |
 | --- | --- | --- | --- | --- | --- | --- |
 | [2026-09-04-001](2026-09-04-001-cli-agentic-code-generator.md) | Build a CLI Agentic Code Generator (spec -> React+TS app) | deep | deep | VERY_HIGH | High | ready |
+| [2026-09-05-001](2026-09-05-001-agent-runs-plan-and-work-skills.md) | The agent/ CLI runs the plan and work skills (autopilot, task files always) | deep | deep | HIGH | Medium | ready |
+| [2026-09-05-003](2026-09-05-003-per-task-agent-sessions-with-git-commits.md) | Split the agent pipeline into per-task sessions with git-commit boundaries | deep | deep | HIGH | High | ready |
 
 ## Session Ends
 
@@ -27,3 +29,5 @@ This is the index of planning documents for the project. It serves as a central 
 - [2026-09-04-003](.end-session/2026-09-04-003.md): Execute T01 sub-project wiring — `agent/` isolated as its own type-checked, node-tested TS sub-project (own tsconfig + vitest project, `agent:typecheck`/`agent:test`, root vitest `include` pinned to `src/**`, no `dotenv`). Commit `e3b1561`. Agent: pi.
 - [2026-09-04-004](.end-session/2026-09-04-004.md): Review T01 implementation — comprehensive behavioral review of sub-project isolation foundation; all acceptance criteria verified, 6 tests passing, no regressions. Commit `0c98e0c`. Agent: pi-coding-agent.
 - [2026-09-04-005](.end-session/2026-09-04-005.md): Append skills requirement to plan 2026-09-04-001 (v1.1) — new U14 (skill discovery + prompt injection from `agent/skills/`), sliced as T15; direct-append mode, existing IDs stable. Commit `5cb029e`. Agent: pi.
+- [2026-09-05-001](.end-session/2026-09-05-001.md): Add OpenRouter provider and strengthen planner prompt — fixed validation error with enhanced LLM prompts and added third provider option for fallback. Commit `4e6c6a6`. Agent: assistant.
+- [2026-09-05-002](.end-session/2026-09-05-002.md): Run plan and work skills in the agent pipeline — planner executes `.agents/skills/plan` (autopilot, Tasks phase always on) and the executor runs `/work`'s Execute phase per task artifact; plan + task artifacts registered as plan 2026-09-05-001 (15 tasks, 3 open). Commits `961f6ed`, `86e34d2`. Agent: pi.

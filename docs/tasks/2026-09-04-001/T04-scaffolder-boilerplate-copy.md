@@ -4,7 +4,7 @@ title: "Scaffolder: boilerplate copy"
 plan-id: 2026-09-04-001
 unit: U3
 tier: deep
-status: not-started
+status: completed
 priority: P0
 dependencies: [2026-09-04-001-T02]
 files:
@@ -36,7 +36,7 @@ Scaffolding copies the app subset (`src/`, `public/`, `index.html`, `package.jso
 - Read-only guarantee: reference `src/App.tsx` byte-identical after scaffolding
 
 ## Acceptance Criteria
-- [ ] Scaffolding copies the app subset into the output directory, excludes node_modules/agent/docs, and refuses to overwrite non-empty output without --force
+- [x] Scaffolding copies the app subset into the output directory, excludes node_modules/agent/docs, and refuses to overwrite non-empty output without --force
 
 ## Dependencies
 - 2026-09-04-001-T02: CLI config must resolve `--out` and `--force` flags before scaffolder can be invoked

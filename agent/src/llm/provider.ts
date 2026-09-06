@@ -124,7 +124,8 @@ export function parseToolArguments(
   provider: string,
 ): Record<string, unknown> {
   const details = { provider, tool: toolName };
-  const isPlainObject = typeof raw === "object" && raw !== null && !Array.isArray(raw);
+  const isPlainObject =
+    typeof raw === "object" && raw !== null && !Array.isArray(raw);
   if (isPlainObject) return raw as Record<string, unknown>;
   if (typeof raw !== "string") {
     throw new LlmError(
@@ -197,9 +198,14 @@ interface RetryPolicy {
 }
 
 function resolveRetry(options: ProviderOptions): RetryPolicy {
-  const maxAttempts = Math.max(1, options.maxAttempts ?? RETRY_DEFAULTS.maxAttempts);
+  const maxAttempts = Math.max(
+    1,
+    options.maxAttempts ?? RETRY_DEFAULTS.maxAttempts,
+  );
   const maxBackoffMs = options.maxBackoffMs ?? RETRY_DEFAULTS.maxBackoffMs;
-  const backoff = options.backoffMs ?? ((attempt: number) => RETRY_DEFAULTS.baseBackoffMs * 2 ** attempt);
+  const backoff =
+    options.backoffMs ??
+    ((attempt: number) => RETRY_DEFAULTS.baseBackoffMs * 2 ** attempt);
   return {
     maxAttempts,
     backoffMs: (attempt: number) => Math.min(backoff(attempt), maxBackoffMs),
@@ -208,7 +214,11 @@ function resolveRetry(options: ProviderOptions): RetryPolicy {
 }
 
 /** Map an HTTP status onto a classified, retry-flagged adapter error. */
-function classifyHttpError(provider: string, status: number, payload: WireJson): LlmError {
+function classifyHttpError(
+  provider: string,
+  status: number,
+  payload: WireJson,
+): LlmError {
   const kind: LlmErrorKind =
     status === 401 || status === 403
       ? "auth"
@@ -217,10 +227,14 @@ function classifyHttpError(provider: string, status: number, payload: WireJson):
         : status >= 500
           ? "server_error"
           : "invalid_response";
-  return new LlmError(kind, `${provider}: HTTP ${status} — ${providerMessage(payload)}`, {
-    status,
-    details: { provider, status, response: payload },
-  });
+  return new LlmError(
+    kind,
+    `${provider}: HTTP ${status} — ${providerMessage(payload)}`,
+    {
+      status,
+      details: { provider, status, response: payload },
+    },
+  );
 }
 
 function providerMessage(payload: WireJson): string {
@@ -237,7 +251,9 @@ function providerMessage(payload: WireJson): string {
 async function readJsonBody(res: Response): Promise<WireJson> {
   try {
     const parsed = (await res.json()) as unknown;
-    return typeof parsed === "object" && parsed !== null ? (parsed as WireJson) : {};
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as WireJson)
+      : {};
   } catch {
     return {};
   }
@@ -265,7 +281,9 @@ export async function postJson(
   const fetchImpl = options.fetch ?? globalThis.fetch;
 
   for (let attempt = 0; attempt < policy.maxAttempts; attempt += 1) {
-    let outcome: { ok: true; payload: WireJson } | { ok: false; error: LlmError };
+    let outcome:
+      | { ok: true; payload: WireJson }
+      | { ok: false; error: LlmError };
     try {
       const res = await fetchImpl(spec.url, {
         method: "POST",
@@ -276,19 +294,27 @@ export async function postJson(
       const payload = await readJsonBody(res);
       outcome = res.ok
         ? { ok: true, payload }
-        : { ok: false, error: classifyHttpError(spec.provider, res.status, payload) };
+        : {
+            ok: false,
+            error: classifyHttpError(spec.provider, res.status, payload),
+          };
     } catch (cause) {
       const aborted = cause instanceof Error && cause.name === "AbortError";
       outcome = {
         ok: false,
-        error: new LlmError(aborted ? "timeout" : "network", `${spec.provider}: ${String(cause)}`, {
-          details: { provider: spec.provider, cause: String(cause) },
-        }),
+        error: new LlmError(
+          aborted ? "timeout" : "network",
+          `${spec.provider}: ${String(cause)}`,
+          {
+            details: { provider: spec.provider, cause: String(cause) },
+          },
+        ),
       };
     }
 
     if (outcome.ok) return outcome.payload;
-    if (!outcome.error.retryable || attempt + 1 >= policy.maxAttempts) throw outcome.error;
+    if (!outcome.error.retryable || attempt + 1 >= policy.maxAttempts)
+      throw outcome.error;
     await policy.sleep(policy.backoffMs(attempt));
   }
 
