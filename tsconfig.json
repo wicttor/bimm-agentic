@@ -19,8 +19,8 @@
     "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["generated-app/*"]
     }
   },
-  "include": ["src", "vite-env.d.ts"]
+  "include": ["generated-app", "vite-env.d.ts"]
 }

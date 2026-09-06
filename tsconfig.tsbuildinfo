@@ -1,1 +1,19 @@
-{"root":["./src/App.tsx","./src/main.tsx","./src/test-setup.ts","./src/types.ts","./src/__tests__/Example.test.tsx","./src/components/Example.tsx","./src/graphql/client.ts","./src/graphql/queries.ts","./src/mocks/browser.ts","./src/mocks/data.ts","./src/mocks/handlers.ts","./src/mocks/server.ts","./vite-env.d.ts"],"version":"5.7.3"}
+{
+  "root": [
+    "./generated-app/App.tsx",
+    "./generated-app/main.tsx",
+    "./generated-app/test-setup.ts",
+    "./generated-app/types.ts",
+    "./generated-app/__tests__/Example.test.tsx",
+    "./generated-app/components/Example.tsx",
+    "./generated-app/graphql/client.ts",
+    "./generated-app/graphql/queries.ts",
+    "./generated-app/mocks/browser.ts",
+    "./generated-app/mocks/data.ts",
+    "./generated-app/mocks/handlers.ts",
+    "./generated-app/mocks/server.ts",
+    "./vite-env.d.ts"
+  ],
+  "errors": true,
+  "version": "5.7.3"
+}
